@@ -56,8 +56,8 @@ if [[ -f "$config_file" ]]; then
     done < "$config_file"
 fi
 
-# Expand path template
-worktree_path=$(echo "$path_template" | sed "s/\\\$NAME/$branch_name/g; s/\${NAME}/$branch_name/g")
+# Expand path template (use | delimiter to handle branch names with /)
+worktree_path=$(echo "$path_template" | sed "s|\\\$NAME|$branch_name|g; s|\${NAME}|$branch_name|g")
 
 # Make path absolute if relative
 if [[ "$worktree_path" != /* ]]; then

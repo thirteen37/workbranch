@@ -60,8 +60,8 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     if [[ "$line" =~ ^worktree\ (.+)$ ]]; then
         # Process previous worktree
         if [[ -n "$current_worktree" && "$current_worktree" != "$main_worktree" && -n "$current_branch" ]]; then
-            # Check if branch is merged
-            if git branch --merged "$default_branch" | grep -q "^[* ]*$current_branch$"; then
+            # Check if branch is merged (using merge-base to avoid regex issues with branch names)
+            if git merge-base --is-ancestor "$current_branch" "$default_branch" 2>/dev/null; then
                 merged_worktrees+=("$current_worktree|$current_branch")
             else
                 wip_worktrees+=("$current_worktree|$current_branch")
@@ -76,7 +76,7 @@ done < <(git worktree list --porcelain)
 
 # Process last worktree
 if [[ -n "$current_worktree" && "$current_worktree" != "$main_worktree" && -n "$current_branch" ]]; then
-    if git branch --merged "$default_branch" | grep -q "^[* ]*$current_branch$"; then
+    if git merge-base --is-ancestor "$current_branch" "$default_branch" 2>/dev/null; then
         merged_worktrees+=("$current_worktree|$current_branch")
     else
         wip_worktrees+=("$current_worktree|$current_branch")
