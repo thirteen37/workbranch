@@ -1,0 +1,105 @@
+#!/bin/bash
+# wb-rm - Remove a git worktree
+# Usage: wb-rm <worktree-path> [--delete-branch]
+
+set -euo pipefail
+
+usage() {
+    echo "Usage: wb-rm <worktree-path> [--delete-branch]"
+    echo ""
+    echo "Removes the specified git worktree."
+    echo ""
+    echo "Options:"
+    echo "  --delete-branch    Also delete the branch after removing worktree"
+    exit 1
+}
+
+# Parse arguments
+if [[ $# -lt 1 ]]; then
+    usage
+fi
+
+worktree_path="$1"
+delete_branch=false
+
+shift
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --delete-branch) delete_branch=true ;;
+        *) echo "ERROR: Unknown option: $1 | ACTION: Use --delete-branch or no options"; exit 1 ;;
+    esac
+    shift
+done
+
+# Verify we're in a git repository
+if ! git_root=$(git rev-parse --show-toplevel 2>/dev/null); then
+    echo "ERROR: Not in a git repository | ACTION: Navigate to a git repository first"
+    exit 1
+fi
+
+# Make path absolute if relative
+if [[ "$worktree_path" != /* ]]; then
+    worktree_path="$(pwd)/$worktree_path"
+fi
+
+# Normalize path (remove trailing slash, resolve ..)
+worktree_path=$(cd "$worktree_path" 2>/dev/null && pwd) || worktree_path="$worktree_path"
+
+# Check if worktree exists
+if ! git worktree list --porcelain | grep -q "^worktree $worktree_path$"; then
+    echo "ERROR: No worktree found at $worktree_path | ACTION: Check path with wb-list"
+    exit 1
+fi
+
+# Get branch name from worktree
+branch_name=""
+in_target=false
+while IFS= read -r line; do
+    if [[ "$line" == "worktree $worktree_path" ]]; then
+        in_target=true
+    elif $in_target; then
+        if [[ "$line" =~ ^branch\ refs/heads/(.+)$ ]]; then
+            branch_name="${BASH_REMATCH[1]}"
+            break
+        elif [[ "$line" =~ ^worktree ]]; then
+            break
+        fi
+    fi
+done < <(git worktree list --porcelain)
+
+# Check if this is the main worktree
+main_worktree=$(git worktree list --porcelain | grep "^worktree " | head -1 | sed 's/^worktree //')
+if [[ "$worktree_path" == "$main_worktree" ]]; then
+    echo "ERROR: Cannot remove main worktree | ACTION: This is the primary repository, not a worktree"
+    exit 1
+fi
+
+# Remove worktree
+echo "Removing worktree at $worktree_path..."
+
+if ! git worktree remove "$worktree_path" 2>&1; then
+    # Try force remove if there are changes
+    echo "WARNING: Worktree has uncommitted changes"
+    echo "ERROR: Cannot remove worktree with uncommitted changes | ACTION: Commit or stash changes first, or use 'git worktree remove --force'"
+    exit 1
+fi
+
+echo "Worktree removed."
+
+# Delete branch if requested
+if $delete_branch && [[ -n "$branch_name" ]]; then
+    echo "Deleting branch '$branch_name'..."
+
+    # Try safe delete first
+    if git branch -d "$branch_name" 2>&1; then
+        echo "Branch deleted."
+    else
+        echo "WARNING: Branch not fully merged"
+        echo "ERROR: Cannot delete unmerged branch | ACTION: Use 'git branch -D $branch_name' to force delete"
+        exit 1
+    fi
+fi
+
+echo ""
+echo "SUCCESS: Worktree removed"
+[[ -n "$branch_name" ]] && echo "BRANCH: $branch_name ($(if $delete_branch; then echo "deleted"; else echo "kept"; fi))"

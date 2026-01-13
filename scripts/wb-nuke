@@ -1,0 +1,169 @@
+#!/bin/bash
+# wb-nuke - Clean up merged worktrees (and optionally WIP worktrees)
+# Usage: wb-nuke [--wip] [--dry-run]
+#
+# DANGEROUS: This removes worktrees and optionally their branches!
+
+set -euo pipefail
+
+usage() {
+    echo "Usage: wb-nuke [--wip] [--dry-run]"
+    echo ""
+    echo "Removes worktrees for branches that have been merged into the default branch."
+    echo ""
+    echo "Options:"
+    echo "  --wip       Also remove WIP (unmerged) worktrees (DANGEROUS!)"
+    echo "  --dry-run   Show what would be removed without actually removing"
+    echo ""
+    echo "WARNING: This is a destructive operation!"
+    exit 1
+}
+
+# Parse arguments
+include_wip=false
+dry_run=false
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --wip) include_wip=true ;;
+        --dry-run) dry_run=true ;;
+        -h|--help) usage ;;
+        *) echo "ERROR: Unknown option: $1 | ACTION: Use --wip, --dry-run, or --help"; exit 1 ;;
+    esac
+    shift
+done
+
+# Verify we're in a git repository
+if ! git_root=$(git rev-parse --show-toplevel 2>/dev/null); then
+    echo "ERROR: Not in a git repository | ACTION: Navigate to a git repository first"
+    exit 1
+fi
+
+# Get default branch
+default_branch=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo "main")
+
+# Get main worktree (cannot be removed)
+main_worktree=$(git worktree list --porcelain | grep "^worktree " | head -1 | sed 's/^worktree //')
+
+echo "Analyzing worktrees..."
+echo "Default branch: $default_branch"
+echo "Main worktree: $main_worktree"
+echo ""
+
+merged_worktrees=()
+wip_worktrees=()
+
+current_worktree=""
+current_branch=""
+
+while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" =~ ^worktree\ (.+)$ ]]; then
+        # Process previous worktree
+        if [[ -n "$current_worktree" && "$current_worktree" != "$main_worktree" && -n "$current_branch" ]]; then
+            # Check if branch is merged
+            if git branch --merged "$default_branch" | grep -q "^[* ]*$current_branch$"; then
+                merged_worktrees+=("$current_worktree|$current_branch")
+            else
+                wip_worktrees+=("$current_worktree|$current_branch")
+            fi
+        fi
+        current_worktree="${BASH_REMATCH[1]}"
+        current_branch=""
+    elif [[ "$line" =~ ^branch\ refs/heads/(.+)$ ]]; then
+        current_branch="${BASH_REMATCH[1]}"
+    fi
+done < <(git worktree list --porcelain)
+
+# Process last worktree
+if [[ -n "$current_worktree" && "$current_worktree" != "$main_worktree" && -n "$current_branch" ]]; then
+    if git branch --merged "$default_branch" | grep -q "^[* ]*$current_branch$"; then
+        merged_worktrees+=("$current_worktree|$current_branch")
+    else
+        wip_worktrees+=("$current_worktree|$current_branch")
+    fi
+fi
+
+# Report findings
+echo "MERGED WORKTREES (safe to remove):"
+if [[ ${#merged_worktrees[@]} -eq 0 ]]; then
+    echo "  (none)"
+else
+    for entry in "${merged_worktrees[@]}"; do
+        IFS='|' read -r path branch <<< "$entry"
+        echo "  $path ($branch)"
+    done
+fi
+echo ""
+
+echo "WIP WORKTREES (unmerged):"
+if [[ ${#wip_worktrees[@]} -eq 0 ]]; then
+    echo "  (none)"
+else
+    for entry in "${wip_worktrees[@]}"; do
+        IFS='|' read -r path branch <<< "$entry"
+        echo "  $path ($branch)"
+    done
+fi
+echo ""
+
+# Determine what to remove
+to_remove=("${merged_worktrees[@]}")
+if $include_wip; then
+    to_remove+=("${wip_worktrees[@]}")
+fi
+
+if [[ ${#to_remove[@]} -eq 0 ]]; then
+    echo "Nothing to remove."
+    exit 0
+fi
+
+# Dry run or actual removal
+if $dry_run; then
+    echo "DRY RUN - Would remove:"
+    for entry in "${to_remove[@]}"; do
+        IFS='|' read -r path branch <<< "$entry"
+        echo "  Worktree: $path"
+        echo "  Branch: $branch"
+        echo ""
+    done
+    echo "Run without --dry-run to actually remove."
+    exit 0
+fi
+
+# Actual removal
+echo "REMOVING WORKTREES:"
+removed_count=0
+failed_count=0
+
+for entry in "${to_remove[@]}"; do
+    IFS='|' read -r path branch <<< "$entry"
+    echo ""
+    echo "Removing: $path ($branch)"
+
+    # Remove worktree
+    if git worktree remove "$path" 2>&1; then
+        echo "  Worktree removed."
+
+        # Delete branch
+        if git branch -d "$branch" 2>&1; then
+            echo "  Branch deleted."
+        else
+            echo "  WARNING: Could not delete branch (may need force delete)"
+        fi
+        ((removed_count++))
+    else
+        echo "  ERROR: Failed to remove worktree (may have uncommitted changes)"
+        ((failed_count++))
+    fi
+done
+
+echo ""
+echo "=========="
+echo "SUMMARY: Removed $removed_count worktree(s), $failed_count failed"
+
+if [[ $failed_count -gt 0 ]]; then
+    echo "ERROR: Some worktrees could not be removed | ACTION: Check for uncommitted changes or use 'git worktree remove --force'"
+    exit 1
+fi
+
+echo "SUCCESS: Cleanup complete"

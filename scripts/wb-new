@@ -1,0 +1,154 @@
+#!/bin/bash
+# wb-new - Create a new git worktree with config file copying
+# Usage: wb-new <branch-name> [source-branch]
+
+set -euo pipefail
+
+usage() {
+    echo "Usage: wb-new <branch-name> [source-branch]"
+    echo ""
+    echo "Creates a new git worktree for the specified branch."
+    echo "If the branch doesn't exist, it will be created from source-branch (default: current branch)."
+    echo ""
+    echo "Configuration is read from .workbranch in the project root."
+    exit 1
+}
+
+# Check arguments
+if [[ $# -lt 1 ]]; then
+    usage
+fi
+
+branch_name="$1"
+source_branch="${2:-HEAD}"
+
+# Verify we're in a git repository
+if ! git_root=$(git rev-parse --show-toplevel 2>/dev/null); then
+    echo "ERROR: Not in a git repository | ACTION: Navigate to a git repository first"
+    exit 1
+fi
+
+# Load configuration
+config_file="$git_root/.workbranch"
+copy_patterns=""
+ignore_patterns="node_modules:dist:.git"
+path_template="../\$NAME"
+post_create=""
+delete_branch="false"
+
+if [[ -f "$config_file" ]]; then
+    while IFS='=' read -r key value || [[ -n "$key" ]]; do
+        # Skip comments and empty lines
+        [[ "$key" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "$key" ]] && continue
+
+        # Remove leading/trailing whitespace and quotes
+        key=$(echo "$key" | xargs)
+        value=$(echo "$value" | sed 's/^["'"'"']//; s/["'"'"']$//')
+
+        case "$key" in
+            copy) copy_patterns="$value" ;;
+            ignore) ignore_patterns="$value" ;;
+            path) path_template="$value" ;;
+            post_create) post_create="$value" ;;
+            delete_branch) delete_branch="$value" ;;
+        esac
+    done < "$config_file"
+fi
+
+# Expand path template
+worktree_path=$(echo "$path_template" | sed "s/\\\$NAME/$branch_name/g; s/\${NAME}/$branch_name/g")
+
+# Make path absolute if relative
+if [[ "$worktree_path" != /* ]]; then
+    worktree_path="$git_root/$worktree_path"
+fi
+
+# Normalize path
+worktree_path=$(cd "$(dirname "$worktree_path")" 2>/dev/null && pwd)/$(basename "$worktree_path") || worktree_path="$worktree_path"
+
+# Check if worktree already exists
+if git worktree list --porcelain | grep -q "^worktree $worktree_path$"; then
+    echo "ERROR: Worktree already exists at $worktree_path | ACTION: Use existing worktree or remove it with wb-rm"
+    exit 1
+fi
+
+# Check if branch exists
+branch_exists=false
+if git show-ref --verify --quiet "refs/heads/$branch_name" 2>/dev/null; then
+    branch_exists=true
+fi
+
+# Create worktree
+echo "Creating worktree for branch '$branch_name' at $worktree_path..."
+
+if $branch_exists; then
+    if ! git worktree add "$worktree_path" "$branch_name" 2>&1; then
+        echo "ERROR: Failed to create worktree | ACTION: Check if branch is already checked out elsewhere"
+        exit 1
+    fi
+else
+    if ! git worktree add -b "$branch_name" "$worktree_path" "$source_branch" 2>&1; then
+        echo "ERROR: Failed to create worktree and branch | ACTION: Check if source branch exists"
+        exit 1
+    fi
+fi
+
+echo "Worktree created successfully."
+
+# Copy config files if patterns specified
+if [[ -n "$copy_patterns" ]]; then
+    echo "Copying config files..."
+
+    # Build rsync exclude args
+    exclude_args=()
+    IFS=':' read -ra IGNORE <<< "$ignore_patterns"
+    for pattern in "${IGNORE[@]}"; do
+        exclude_args+=(--exclude "$pattern")
+    done
+
+    # Process each copy pattern
+    IFS=':' read -ra PATTERNS <<< "$copy_patterns"
+    for pattern in "${PATTERNS[@]}"; do
+        # Use find to get matching files, then rsync each
+        while IFS= read -r -d '' file; do
+            rel_path="${file#$git_root/}"
+            dest_dir="$worktree_path/$(dirname "$rel_path")"
+            mkdir -p "$dest_dir"
+            cp -a "$file" "$dest_dir/" 2>/dev/null || true
+        done < <(find "$git_root" -path "$git_root/.git" -prune -o -name "$pattern" -print0 2>/dev/null)
+
+        # Also try glob expansion for directory patterns
+        for file in "$git_root"/$pattern; do
+            if [[ -e "$file" ]]; then
+                rel_path="${file#$git_root/}"
+                dest_dir="$worktree_path/$(dirname "$rel_path")"
+                mkdir -p "$dest_dir"
+                cp -a "$file" "$dest_dir/" 2>/dev/null || true
+            fi
+        done
+    done
+
+    echo "Config files copied."
+fi
+
+# Run post-create commands
+if [[ -n "$post_create" ]]; then
+    echo "Running post-create commands..."
+    cd "$worktree_path"
+
+    # Handle multi-line post_create (newline or semicolon separated)
+    while IFS= read -r cmd || [[ -n "$cmd" ]]; do
+        [[ -z "$cmd" ]] && continue
+        echo "  Running: $cmd"
+        if ! eval "$cmd"; then
+            echo "WARNING: Post-create command failed: $cmd | ACTION: You may need to run this manually"
+        fi
+    done <<< "$(echo "$post_create" | tr ';' '\n')"
+
+    echo "Post-create commands completed."
+fi
+
+echo ""
+echo "SUCCESS: Worktree ready at $worktree_path"
+echo "BRANCH: $branch_name"
