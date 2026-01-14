@@ -1,5 +1,5 @@
 {
-  "description": "Workbranch hooks: Soft-block commits on main/master branch, suggest using worktree workflow",
+  "description": "Workbranch hooks: Soft-remind on git commits to verify branch",
   "hooks": {
     "PreToolUse": [
       {
@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "Check if this Bash command is a git commit on main/master branch. Command: $TOOL_INPUT\n\nIf this is a git commit command AND on main/master branch, return 'ask' with a message suggesting worktree workflow. Otherwise return 'allow'.",
+            "prompt": "You must return ONLY valid JSON. No other text.\n\nCommand: $TOOL_INPUT\n\nIf this command contains 'git commit':\n{\"hookSpecificOutput\":{\"permissionDecision\":\"ask\"},\"systemMessage\":\"Committing - verify you're on a feature branch, not main/master. Use /workbranch to create a worktree if needed.\"}\n\nIf this command does NOT contain 'git commit':\n{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\"}}\n\nRespond with ONLY the JSON. No explanation.",
             "timeout": 15
           }
         ]
