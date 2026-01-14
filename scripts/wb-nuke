@@ -6,6 +6,9 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/wb-lib"
+
 usage() {
     echo "Usage: wb-nuke [--wip] [--dry-run]"
     echo ""
@@ -34,13 +37,14 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Verify we're in a git repository
-if ! git_root=$(git rev-parse --show-toplevel 2>/dev/null); then
-    echo "ERROR: Not in a git repository | ACTION: Navigate to a git repository first"
-    exit 1
-fi
+git_root=$(wb_require_git_root)
 
 # Get default branch
-default_branch=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo "main")
+default_branch=$(wb_get_default_branch)
+if [[ -z "$default_branch" ]]; then
+    echo "ERROR: Cannot determine default branch | ACTION: Ensure remote is configured"
+    exit 1
+fi
 
 # Get main worktree (cannot be removed)
 main_worktree=$(git worktree list --porcelain | grep "^worktree " | head -1 | sed 's/^worktree //')
@@ -148,7 +152,7 @@ for entry in "${to_remove[@]}"; do
         if git branch -d "$branch" 2>&1; then
             echo "  Branch deleted."
         else
-            echo "  WARNING: Could not delete branch (may need force delete)"
+            echo "  WARNING: Could not delete branch | ACTION: Use 'git branch -D $branch' to force delete"
         fi
         ((removed_count++))
     else

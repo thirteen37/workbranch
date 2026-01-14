@@ -5,6 +5,9 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/wb-lib"
+
 usage() {
     echo "Usage: wb-list"
     echo ""
@@ -19,13 +22,13 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
 fi
 
 # Get the git root directory
-if ! git_root=$(git rev-parse --show-toplevel 2>/dev/null); then
-    echo "ERROR: Not in a git repository | ACTION: Navigate to a git repository first"
-    exit 1
-fi
+git_root=$(wb_require_git_root)
 
 # Get default branch (main or master)
-default_branch=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo "main")
+default_branch=$(wb_get_default_branch)
+if [[ -z "$default_branch" ]]; then
+    default_branch="main"  # fallback for display purposes
+fi
 
 # Parse git worktree list --porcelain
 worktree_count=0
