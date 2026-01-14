@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "Analyze this Bash command to determine if it's a git commit on main or master branch.\n\nCommand being executed: $TOOL_INPUT\n\nCheck:\n1. Is this a `git commit` command (including variations like `git commit -m`, `git commit -am`, etc.)?\n2. Are we currently on the 'main' or 'master' branch?\n\nIf BOTH conditions are true (git commit AND on main/master):\n- Return permissionDecision: 'ask'\n- Provide systemMessage explaining: 'You are about to commit directly to the main/master branch. Consider creating a worktree for this work instead using wb-new. If you proceed, the user will need to confirm.'\n\nIf either condition is false (not a git commit, OR not on main/master):\n- Return permissionDecision: 'allow'\n- No systemMessage needed\n\nReturn JSON in this format:\n{\n  \"hookSpecificOutput\": {\n    \"permissionDecision\": \"allow\" or \"ask\"\n  },\n  \"systemMessage\": \"Only include if asking\"\n}",
+            "prompt": "Check if this Bash command is a git commit on main/master branch. Command: $TOOL_INPUT\n\nIf this is a git commit command AND on main/master branch, return 'ask' with a message suggesting worktree workflow. Otherwise return 'allow'.",
             "timeout": 15
           }
         ]
