@@ -116,8 +116,31 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/wb-move hotfix-auth --commits 2
 
 ### Finishing Work
 
-1. **Push and create PR**: Push the branch and open a pull request
-2. **After merge**: Remove worktree with `wb-rm <path> --delete-branch`
+There are two workflows for completing work, depending on your project's merge strategy:
+
+#### Option A: With Pull Request
+
+1. **Push branch**: `git push -u origin <branch-name>`
+2. **Create PR**: Open a pull request for code review
+3. **After merge**: Once the PR is merged, clean up:
+   ```bash
+   wb-rm <worktree-path> --delete-branch
+   ```
+
+#### Option B: Direct Merge to Main (No PR)
+
+For workflows that merge directly without a pull request:
+
+1. **Switch to main worktree**: Navigate to the main worktree directory
+2. **Update main**: `git pull` to ensure main is current
+3. **Merge the branch**: `git merge <branch-name>`
+4. **Push main**: `git push`
+5. **Clean up worktree**: Remove the feature worktree and its branch:
+   ```bash
+   wb-rm <worktree-path> --delete-branch
+   ```
+
+**Note**: The `--delete-branch` flag only deletes branches that have been merged. If you need to abandon unmerged work, use `git branch -D <branch>` manually after removing the worktree.
 
 ## Handling Existing WIP Worktrees
 
@@ -202,9 +225,9 @@ Once in a worktree:
 
 ### Clean Up After Merge
 
-After a PR is merged:
-- Suggest removing the worktree
-- Offer to delete the branch if merged
+After work is merged (via PR or direct merge):
+- Suggest removing the worktree with `wb-rm <path> --delete-branch`
+- The `--delete-branch` flag safely deletes only merged branches
 
 ### Recovering from Mistakes on Main
 
