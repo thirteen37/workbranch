@@ -12,6 +12,8 @@ Git worktrees enable isolated development by creating separate working directori
 
 **Core principle**: Never use `git checkout` or `git switch` for feature/bugfix work. Always create a worktree instead.
 
+**Script location**: `${CLAUDE_PLUGIN_ROOT}/scripts/wb` — use `wb <subcommand>` throughout.
+
 ## When to Use Worktrees
 
 Create a worktree for:
@@ -313,16 +315,8 @@ This handles both uncommitted changes and local commits that diverged from origi
 
 ## Script Locations
 
-The `wb` dispatcher is at `${CLAUDE_PLUGIN_ROOT}/scripts/wb` and routes to individual scripts:
-
-- `${CLAUDE_PLUGIN_ROOT}/scripts/wb-new`
-- `${CLAUDE_PLUGIN_ROOT}/scripts/wb-list`
-- `${CLAUDE_PLUGIN_ROOT}/scripts/wb-rm`
-- `${CLAUDE_PLUGIN_ROOT}/scripts/wb-move`
-- `${CLAUDE_PLUGIN_ROOT}/scripts/wb-done`
-- `${CLAUDE_PLUGIN_ROOT}/scripts/wb-nuke` (dangerous cleanup, user-invoked only)
-
-Use `wb <subcommand>` for convenience, or invoke scripts directly with `${CLAUDE_PLUGIN_ROOT}/scripts/wb-<name>`.
+All scripts are in `${CLAUDE_PLUGIN_ROOT}/scripts/`:
+- `wb` — unified dispatcher (routes to `wb-new`, `wb-list`, `wb-rm`, `wb-move`, `wb-done`, `wb-nuke`)
 
 ## Quick Reference
 
