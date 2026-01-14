@@ -1,0 +1,60 @@
+#!/bin/bash
+# install-local - Install plugin locally for testing
+# Usage: install-local [--symlink]
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CACHE_DIR="$HOME/.claude/plugins/cache"
+PLUGIN_DIR="$CACHE_DIR/thirteen37-plugins/workbranch/0.1.0"
+
+usage() {
+    echo "Usage: install-local [--symlink]"
+    echo ""
+    echo "Install workbranch plugin locally for testing."
+    echo ""
+    echo "Options:"
+    echo "  --symlink    Create symlink instead of copying (changes reflect immediately)"
+    echo "  -h, --help   Show this help"
+    exit 1
+}
+
+USE_SYMLINK=false
+
+for arg in "$@"; do
+    case "$arg" in
+        --symlink)
+            USE_SYMLINK=true
+            ;;
+        -h|--help)
+            usage
+            ;;
+        *)
+            echo "ERROR: Unknown option: $arg | ACTION: Use -h or --help to see valid options"
+            exit 1
+            ;;
+    esac
+done
+
+# Remove existing installation
+if [[ -e "$PLUGIN_DIR" || -L "$PLUGIN_DIR" ]]; then
+    echo "Removing existing installation..."
+    rm -rf "$PLUGIN_DIR"
+fi
+
+# Ensure parent directory exists
+mkdir -p "$(dirname "$PLUGIN_DIR")"
+
+if [[ "$USE_SYMLINK" == true ]]; then
+    echo "Creating symlink to $SCRIPT_DIR..."
+    ln -s "$SCRIPT_DIR" "$PLUGIN_DIR"
+    echo "SUCCESS: Symlinked plugin (changes reflect immediately)"
+else
+    echo "Copying files to $PLUGIN_DIR..."
+    mkdir -p "$PLUGIN_DIR"
+    # Copy all files except .git
+    rsync -a --exclude='.git' --exclude='install-local' "$SCRIPT_DIR/" "$PLUGIN_DIR/"
+    echo "SUCCESS: Copied plugin to cache"
+fi
+
+echo "LOCATION: $PLUGIN_DIR"

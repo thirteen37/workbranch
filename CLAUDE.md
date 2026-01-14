@@ -136,6 +136,7 @@ The PreToolUse hook in `hooks/hooks.json` uses the prompt-based hook API. It ret
 
 ## Development Guidelines
 
+- **Use worktrees for all changes**: This plugin must eat its own dogfood. Always use `/workbranch` to create a worktree before making any changes. Never commit directly to main.
 - Branch names can contain `/` (e.g., `feature/login`, `fix/auth-bug`) - use `|` as sed delimiter instead of `/`
 - When writing regex patterns, ensure they handle slashes in branch names
 
