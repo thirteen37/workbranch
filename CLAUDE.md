@@ -72,5 +72,4 @@ The PreToolUse hook in `hooks/hooks.json` uses the prompt-based hook API. It ret
 
 ## Known Issues
 
-- `wb-new` fails with branch names containing `/` due to sed delimiter issue (needs fix)
 - PreToolUse:Bash hook has schema validation errors (needs investigation)

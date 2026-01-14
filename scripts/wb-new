@@ -64,8 +64,16 @@ if [[ "$worktree_path" != /* ]]; then
     worktree_path="$git_root/$worktree_path"
 fi
 
-# Normalize path
-worktree_path=$(cd "$(dirname "$worktree_path")" 2>/dev/null && pwd)/$(basename "$worktree_path") || worktree_path="$worktree_path"
+# Normalize path (handle branch names with slashes - intermediate dirs may not exist)
+# Use Python for reliable path normalization, fallback to perl, then bash
+if command -v python3 &>/dev/null; then
+    worktree_path=$(python3 -c "import os; print(os.path.normpath('$worktree_path'))")
+elif command -v perl &>/dev/null; then
+    worktree_path=$(perl -MCwd=realpath -e 'use File::Spec; print File::Spec->canonpath($ARGV[0])' "$worktree_path")
+else
+    # Fallback: manually resolve .. components
+    worktree_path=$(echo "$worktree_path" | sed 's|/[^/]*/\.\./|/|g; s|/\./|/|g')
+fi
 
 # Check if worktree already exists
 if git worktree list --porcelain | grep -q "^worktree $worktree_path$"; then
