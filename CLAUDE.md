@@ -141,3 +141,9 @@ The PreToolUse hook in `hooks/hooks.json` uses the prompt-based hook API. It ret
 - Branch names can contain `/` (e.g., `feature/login`, `fix/auth-bug`) - use `|` as sed delimiter instead of `/`
 - When writing regex patterns, ensure they handle slashes in branch names
 
+## Known Issues
+
+- [ ] **Noisy PreToolUse hook**: The prompt-based hook in `hooks/hooks.json` generates unnecessary errors even when it should allow the action. It returns explanatory text instead of the expected JSON response format, causing "Prompt hook condition was not met" errors on valid feature branch commits.
+
+- [ ] **CLAUDE.md prompt enforcement**: Need to update this file's instructions to more strongly enforce the worktree/workbranch workflow, so Claude automatically uses `/workbranch` before making any changes to this repo.
+
