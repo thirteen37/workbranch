@@ -1,0 +1,50 @@
+#!/bin/bash
+# wb - Unified workbranch dispatcher
+# Usage: wb <command> [args]
+#
+# A single entrypoint for all workbranch commands:
+#   wb new <branch>     - Create new worktree
+#   wb list             - List worktrees
+#   wb rm <path>        - Remove worktree
+#   wb move <branch>    - Move changes from main to new worktree
+#   wb done             - Merge and cleanup current worktree
+#   wb nuke             - Bulk cleanup of worktrees
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+usage() {
+    echo "Usage: wb <command> [args]"
+    echo ""
+    echo "Commands:"
+    echo "  new <branch> [source]        Create new worktree"
+    echo "  list                         List worktrees"
+    echo "  rm <path> [--delete-branch]  Remove worktree"
+    echo "  move <branch> [--commits N]  Move changes from main"
+    echo "  done [options]               Merge and cleanup"
+    echo "  nuke [--wip] [--dry-run]     Bulk cleanup"
+    echo ""
+    echo "Run 'wb <command> -h' for command-specific help."
+    exit 1
+}
+
+if [[ $# -lt 1 ]]; then
+    usage
+fi
+
+cmd="$1"
+shift
+
+case "$cmd" in
+    new|list|rm|move|done|nuke)
+        exec "$SCRIPT_DIR/wb-$cmd" "$@"
+        ;;
+    -h|--help|help)
+        usage
+        ;;
+    *)
+        echo "ERROR: Unknown command: $cmd | ACTION: Use 'wb -h' for valid commands"
+        exit 1
+        ;;
+esac
