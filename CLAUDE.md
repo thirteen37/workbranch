@@ -157,9 +157,5 @@ The PreToolUse hook in `hooks/hooks.json` uses the prompt-based hook API. It ret
 
 ## Known Issues
 
-- [ ] **Noisy PreToolUse hook**: The prompt-based hook in `hooks/hooks.json` generates unnecessary errors even when it should allow the action. It returns explanatory text instead of the expected JSON response format, causing "Prompt hook condition was not met" errors on valid feature branch commits.
-
-- [ ] **CLAUDE.md prompt enforcement**: Need to update this file's instructions to more strongly enforce the worktree/workbranch workflow, so Claude automatically uses `/workbranch` before making any changes to this repo.
-
-- [ ] **wb-done deletes cwd**: When `wb-done` is run from within the feature worktree, it deletes that directory. This leaves Claude Code's working directory invalid, causing all subsequent bash commands and hooks (including Stop hooks from other plugins) to fail with `ENOENT: no such file or directory, posix_spawn '/bin/sh'`. Requires session restart to recover. Potential fix: output a message instructing the user/Claude to navigate to the main worktree after completion.
+None currently tracked.
 
