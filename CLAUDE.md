@@ -147,3 +147,5 @@ The PreToolUse hook in `hooks/hooks.json` uses the prompt-based hook API. It ret
 
 - [ ] **CLAUDE.md prompt enforcement**: Need to update this file's instructions to more strongly enforce the worktree/workbranch workflow, so Claude automatically uses `/workbranch` before making any changes to this repo.
 
+- [ ] **wb-done deletes cwd**: When `wb-done` is run from within the feature worktree, it deletes that directory. This leaves Claude Code's working directory invalid, causing all subsequent bash commands and hooks (including Stop hooks from other plugins) to fail with `ENOENT: no such file or directory, posix_spawn '/bin/sh'`. Requires session restart to recover. Potential fix: output a message instructing the user/Claude to navigate to the main worktree after completion.
+
