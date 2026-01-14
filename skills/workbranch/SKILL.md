@@ -132,6 +132,12 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/wb-done --skip-merge
 ${CLAUDE_PLUGIN_ROOT}/scripts/wb-done --dry-run
 ```
 
+**CRITICAL**: After `wb-done` completes, your current directory will have been deleted. Immediately run:
+```bash
+cd <path-shown-in-NAVIGATE-output>
+```
+Failure to do this will cause all subsequent commands to fail with ENOENT errors.
+
 ## Workflow for Feature/Bug Development
 
 ### Starting Work
@@ -156,6 +162,8 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/wb-done
 ```
 
 This handles the entire workflow: merge to main, push, remove worktree, and delete branches.
+
+**Note**: After `wb-done` completes, navigate to the main worktree as instructed in the output. The feature worktree directory no longer exists.
 
 #### Option A: Direct Merge (Default)
 
