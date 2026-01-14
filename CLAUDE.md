@@ -1,5 +1,19 @@
 # CLAUDE.md
 
+## MANDATORY: Worktree-First Development
+
+**Before making ANY code changes to this repository:**
+
+1. Run `git branch --show-current` to check current branch
+2. If on `main` or `master`, STOP and create a worktree first:
+   ```bash
+   ${CLAUDE_PLUGIN_ROOT}/scripts/wb-new <descriptive-branch-name>
+   ```
+3. Navigate to the new worktree directory
+4. Only then proceed with modifications
+
+This is not optional. This plugin enforces worktree-based development. Do not skip this step even for "small" changes.
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Overview
@@ -137,7 +151,7 @@ The PreToolUse hook in `hooks/hooks.json` uses the prompt-based hook API. It ret
 
 ## Development Guidelines
 
-- **Use worktrees for all changes**: This plugin must eat its own dogfood. Always use `/workbranch` to create a worktree before making any changes. Never commit directly to main.
+- **Use worktrees for all changes**: See MANDATORY section at top of this file. Never commit directly to main.
 - Branch names can contain `/` (e.g., `feature/login`, `fix/auth-bug`) - use `|` as sed delimiter instead of `/`
 - When writing regex patterns, ensure they handle slashes in branch names
 
