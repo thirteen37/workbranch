@@ -24,16 +24,16 @@ The only exceptions:
 - Quick one-line fixes that can be committed immediately
 - Viewing code on another branch temporarily (read-only)
 
-## Shell Scripts
+## Commands
 
-The workbranch plugin provides shell scripts at `${CLAUDE_PLUGIN_ROOT}/scripts/`:
+The workbranch plugin provides a unified `wb` command with subcommands:
 
-### wb-new - Create Worktree
+### wb new - Create Worktree
 
 Create a new worktree for a branch:
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/scripts/wb-new <branch-name> [source-branch]
+wb new <branch-name> [source-branch]
 ```
 
 - If branch exists, checks it out in a new worktree
@@ -44,18 +44,18 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/wb-new <branch-name> [source-branch]
 **Example usage**:
 ```bash
 # Create worktree for new feature
-${CLAUDE_PLUGIN_ROOT}/scripts/wb-new feature-user-auth
+wb new feature-user-auth
 
 # Create worktree from specific branch
-${CLAUDE_PLUGIN_ROOT}/scripts/wb-new hotfix-login-bug main
+wb new hotfix-login-bug main
 ```
 
-### wb-list - List Worktrees
+### wb list - List Worktrees
 
 Show all worktrees with their status:
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/scripts/wb-list
+wb list
 ```
 
 Output includes:
@@ -65,24 +65,24 @@ Output includes:
 
 Run this to check existing worktrees before creating new ones.
 
-### wb-rm - Remove Worktree
+### wb rm - Remove Worktree
 
 Remove a worktree when done:
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/scripts/wb-rm <worktree-path> [--delete-branch]
+wb rm <worktree-path> [--delete-branch]
 ```
 
 - Removes the worktree directory
 - With `--delete-branch`: also deletes the branch (only if merged)
 - Fails if worktree has uncommitted changes
 
-### wb-move - Rescue Changes from Main
+### wb move - Rescue Changes from Main
 
 Move uncommitted changes and/or local commits from main to a new worktree:
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/scripts/wb-move <branch-name> [--commits N]
+wb move <branch-name> [--commits N]
 ```
 
 - Detects uncommitted changes and commits ahead of origin/main
@@ -93,18 +93,18 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/wb-move <branch-name> [--commits N]
 **Example usage**:
 ```bash
 # Move all divergent changes to a new branch
-${CLAUDE_PLUGIN_ROOT}/scripts/wb-move feature-login
+wb move feature-login
 
 # Move only the last 2 commits
-${CLAUDE_PLUGIN_ROOT}/scripts/wb-move hotfix-auth --commits 2
+wb move hotfix-auth --commits 2
 ```
 
-### wb-done - Merge and Cleanup
+### wb done - Merge and Cleanup
 
 Finish work on a branch by merging to main and cleaning up:
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/scripts/wb-done [options]
+wb done [options]
 ```
 
 Run this from **within a feature worktree** when you're done with the branch.
@@ -120,30 +120,48 @@ Run this from **within a feature worktree** when you're done with the branch.
 **Example usage**:
 ```bash
 # Standard merge + full cleanup
-${CLAUDE_PLUGIN_ROOT}/scripts/wb-done
+wb done
+cd /path/to/main/worktree  # IMPORTANT: Navigate away immediately!
 
 # Squash merge
-${CLAUDE_PLUGIN_ROOT}/scripts/wb-done --squash
+wb done --squash
+cd /path/to/main/worktree  # IMPORTANT: Navigate away immediately!
 
 # Already merged via GitHub PR, just cleanup
-${CLAUDE_PLUGIN_ROOT}/scripts/wb-done --skip-merge
+wb done --skip-merge
+cd /path/to/main/worktree  # IMPORTANT: Navigate away immediately!
 
 # Preview what would happen
-${CLAUDE_PLUGIN_ROOT}/scripts/wb-done --dry-run
+wb done --dry-run
 ```
 
-**CRITICAL**: After `wb-done` completes, your current directory will have been deleted. Immediately run:
+---
+
+**CRITICAL WARNING: Working Directory Deletion**
+
+`wb done` **DELETES YOUR CURRENT DIRECTORY**. After running `wb done`:
+
+1. The feature worktree directory is removed
+2. Your shell's working directory no longer exists
+3. **ALL subsequent commands will fail** with ENOENT errors
+
+**You MUST immediately run:**
 ```bash
 cd <path-shown-in-NAVIGATE-output>
 ```
-Failure to do this will cause all subsequent commands to fail with ENOENT errors.
+
+The script outputs a `NAVIGATE:` line with the exact path. Copy and run it.
+
+If you forget, every bash command will fail until you navigate to a valid directory.
+
+---
 
 ## Workflow for Feature/Bug Development
 
 ### Starting Work
 
-1. **Check existing worktrees**: Run `wb-list` to see current state
-2. **Create worktree**: Run `wb-new <branch-name>` for the feature/fix
+1. **Check existing worktrees**: Run `wb list` to see current state
+2. **Create worktree**: Run `wb new <branch-name>` for the feature/fix
 3. **Navigate to worktree**: Change to the worktree directory
 4. **Begin development**: The worktree is isolated and ready
 
@@ -155,23 +173,29 @@ Failure to do this will cause all subsequent commands to fail with ENOENT errors
 
 ### Finishing Work
 
-Use `wb-done` to complete work on a branch. Run it from within the feature worktree:
+Use `wb done` to complete work on a branch. Run it from within the feature worktree:
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/scripts/wb-done
+wb done
+cd /path/to/main/worktree  # REQUIRED: See CRITICAL WARNING above
 ```
 
 This handles the entire workflow: merge to main, push, remove worktree, and delete branches.
 
-**Note**: After `wb-done` completes, navigate to the main worktree as instructed in the output. The feature worktree directory no longer exists.
+**REMEMBER**: After `wb done` completes, immediately navigate to the main worktree as shown in the output. The feature worktree directory no longer exists.
 
 #### Option A: Direct Merge (Default)
 
-From within your feature worktree, simply run:
+From within your feature worktree:
 ```bash
-wb-done              # Standard merge
-wb-done --squash     # Squash merge
-wb-done --rebase     # Rebase then merge
+wb done              # Standard merge
+cd /path/to/main     # Then navigate away!
+
+wb done --squash     # Squash merge
+cd /path/to/main     # Then navigate away!
+
+wb done --rebase     # Rebase then merge
+cd /path/to/main     # Then navigate away!
 ```
 
 #### Option B: With Pull Request
@@ -180,18 +204,19 @@ wb-done --rebase     # Rebase then merge
 2. **Create PR**: Open a pull request for code review
 3. **After merge**: Once the PR is merged, clean up:
    ```bash
-   wb-done --skip-merge
+   wb done --skip-merge
+   cd /path/to/main     # Then navigate away!
    ```
 
 The `--skip-merge` flag skips the merge phase (since it's already merged via PR) and just cleans up the worktree and branches.
 
-**Note**: For manual cleanup without `wb-done`, use `wb-rm <path> --delete-branch`. This only deletes branches that have been merged. If you need to abandon unmerged work, use `git branch -D <branch>` manually after removing the worktree.
+**Note**: For manual cleanup without `wb done`, use `wb rm <path> --delete-branch`. This only deletes branches that have been merged. If you need to abandon unmerged work, use `git branch -D <branch>` manually after removing the worktree.
 
 ## Handling Existing WIP Worktrees
 
 When starting work and a worktree already exists for the target branch (from a previous interrupted session):
 
-1. **Detect**: Run `wb-list` to check for existing worktree
+1. **Detect**: Run `wb list` to check for existing worktree
 2. **Ask user**: Present options:
    - Resume work in existing worktree
    - Clean up and create fresh worktree
@@ -245,7 +270,7 @@ ERROR: <message> | ACTION: <what to do>
 | Error | Action |
 |-------|--------|
 | Not in a git repository | Navigate to a git repository first |
-| Worktree already exists | Use existing worktree or remove with wb-rm |
+| Worktree already exists | Use existing worktree or remove with wb rm |
 | Branch already checked out | Remove the other worktree first |
 | Uncommitted changes | Commit or stash changes first |
 | Cannot delete unmerged branch | Use `git branch -D` to force delete |
@@ -271,7 +296,8 @@ Once in a worktree:
 ### Clean Up After Merge
 
 After work is merged (via PR or direct merge):
-- Suggest removing the worktree with `wb-rm <path> --delete-branch`
+- Use `wb done` for automatic cleanup (preferred)
+- Or use `wb rm <path> --delete-branch` for manual cleanup
 - The `--delete-branch` flag safely deletes only merged branches
 
 ### Recovering from Mistakes on Main
@@ -279,7 +305,7 @@ After work is merged (via PR or direct merge):
 When changes are accidentally made on main instead of a worktree:
 
 1. **Stop immediately**: Don't continue making changes
-2. **Run wb-move**: `wb-move <appropriate-branch-name>`
+2. **Run wb move**: `wb move <appropriate-branch-name>`
 3. **Navigate to worktree**: Move to the new worktree directory
 4. **Continue work**: Resume development on the feature branch
 
@@ -287,7 +313,7 @@ This handles both uncommitted changes and local commits that diverged from origi
 
 ## Script Locations
 
-All scripts are in the plugin's scripts directory:
+The `wb` dispatcher is at `${CLAUDE_PLUGIN_ROOT}/scripts/wb` and routes to individual scripts:
 
 - `${CLAUDE_PLUGIN_ROOT}/scripts/wb-new`
 - `${CLAUDE_PLUGIN_ROOT}/scripts/wb-list`
@@ -296,19 +322,19 @@ All scripts are in the plugin's scripts directory:
 - `${CLAUDE_PLUGIN_ROOT}/scripts/wb-done`
 - `${CLAUDE_PLUGIN_ROOT}/scripts/wb-nuke` (dangerous cleanup, user-invoked only)
 
-Execute scripts using their full path with `${CLAUDE_PLUGIN_ROOT}` for portability.
+Use `wb <subcommand>` for convenience, or invoke scripts directly with `${CLAUDE_PLUGIN_ROOT}/scripts/wb-<name>`.
 
 ## Quick Reference
 
 | Task | Command |
 |------|---------|
-| List worktrees | `wb-list` |
-| Create worktree | `wb-new <branch>` |
-| Create from branch | `wb-new <branch> <source>` |
-| Finish work (merge + cleanup) | `wb-done` |
-| Finish with squash merge | `wb-done --squash` |
-| Cleanup after PR merge | `wb-done --skip-merge` |
-| Remove worktree | `wb-rm <path>` |
-| Remove + delete branch | `wb-rm <path> --delete-branch` |
-| Rescue changes from main | `wb-move <branch>` |
-| Rescue specific commits | `wb-move <branch> --commits N` |
+| List worktrees | `wb list` |
+| Create worktree | `wb new <branch>` |
+| Create from branch | `wb new <branch> <source>` |
+| Finish work (merge + cleanup) | `wb done` then `cd <main>` |
+| Finish with squash merge | `wb done --squash` then `cd <main>` |
+| Cleanup after PR merge | `wb done --skip-merge` then `cd <main>` |
+| Remove worktree | `wb rm <path>` |
+| Remove + delete branch | `wb rm <path> --delete-branch` |
+| Rescue changes from main | `wb move <branch>` |
+| Rescue specific commits | `wb move <branch> --commits N` |

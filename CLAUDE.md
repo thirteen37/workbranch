@@ -7,7 +7,7 @@
 1. Run `git branch --show-current` to check current branch
 2. If on `main` or `master`, STOP and create a worktree first:
    ```bash
-   ${CLAUDE_PLUGIN_ROOT}/scripts/wb-new <descriptive-branch-name>
+   wb new <descriptive-branch-name>
    ```
 3. Navigate to the new worktree directory
 4. Only then proceed with modifications
@@ -18,13 +18,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-This is a Claude Code plugin that manages git worktrees for isolated development. It provides shell scripts, a skill, a hook, and a command.
+This is a Claude Code plugin that manages git worktrees for isolated development. It provides shell scripts, a skill, and a command.
 
 ## Architecture
 
 ```
 workbranch/
 ├── scripts/          # Shell scripts that do the actual work
+│   ├── wb            # Unified dispatcher (wb <subcommand>)
 │   ├── wb-new        # Create worktree with config copying
 │   ├── wb-list       # List worktrees with status
 │   ├── wb-rm         # Remove worktree
@@ -32,7 +33,6 @@ workbranch/
 │   ├── wb-done       # Merge branch to main and cleanup worktree
 │   └── wb-nuke       # Bulk cleanup (dangerous)
 ├── skills/workbranch/SKILL.md   # Teaches Claude the worktree workflow
-├── hooks/hooks.json             # PreToolUse hook to soft-block commits on main
 ├── commands/nuke.md             # User-invocable cleanup command
 └── .claude-plugin/plugin.json   # Plugin manifest
 ```
@@ -127,26 +127,18 @@ Scripts read configuration from `.workbranch` in the target project root (key=va
 
 ## Testing Scripts
 
-Run scripts directly from the repo:
+Run scripts using the `wb` dispatcher or directly:
 
 ```bash
+# Using dispatcher
+wb list
+wb new test-branch
+wb move feature-name
+wb rm ../test-branch --delete-branch
+
+# Or directly
 ./scripts/wb-list
 ./scripts/wb-new test-branch
-./scripts/wb-move feature-name
-./scripts/wb-rm ../test-branch --delete-branch
-```
-
-## Hook Schema
-
-The PreToolUse hook in `hooks/hooks.json` uses the prompt-based hook API. It returns:
-
-```json
-{
-  "hookSpecificOutput": {
-    "permissionDecision": "allow" | "ask"
-  },
-  "systemMessage": "Optional message when asking"
-}
 ```
 
 ## Development Guidelines
