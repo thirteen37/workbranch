@@ -15,6 +15,7 @@ workbranch/
 │   ├── wb-list       # List worktrees with status
 │   ├── wb-rm         # Remove worktree
 │   ├── wb-move       # Rescue changes from main to worktree
+│   ├── wb-done       # Merge branch to main and cleanup worktree
 │   └── wb-nuke       # Bulk cleanup (dangerous)
 ├── skills/workbranch/SKILL.md   # Teaches Claude the worktree workflow
 ├── hooks/hooks.json             # PreToolUse hook to soft-block commits on main
@@ -136,6 +137,13 @@ The PreToolUse hook in `hooks/hooks.json` uses the prompt-based hook API. It ret
 
 ## Development Guidelines
 
+- **Use worktrees for all changes**: This plugin must eat its own dogfood. Always use `/workbranch` to create a worktree before making any changes. Never commit directly to main.
 - Branch names can contain `/` (e.g., `feature/login`, `fix/auth-bug`) - use `|` as sed delimiter instead of `/`
 - When writing regex patterns, ensure they handle slashes in branch names
+
+## Known Issues
+
+- [ ] **Noisy PreToolUse hook**: The prompt-based hook in `hooks/hooks.json` generates unnecessary errors even when it should allow the action. It returns explanatory text instead of the expected JSON response format, causing "Prompt hook condition was not met" errors on valid feature branch commits.
+
+- [ ] **CLAUDE.md prompt enforcement**: Need to update this file's instructions to more strongly enforce the worktree/workbranch workflow, so Claude automatically uses `/workbranch` before making any changes to this repo.
 

@@ -102,6 +102,48 @@ ERROR: <message> | ACTION: <what to do>
 
 This helps Claude understand and recover from errors automatically.
 
+## Development
+
+### Setup
+
+Clone the repo and use the local install script:
+
+```bash
+git clone https://github.com/thirteen37/thirteen37-plugins.git
+cd thirteen37-plugins/workbranch
+
+# Symlink for live updates (recommended)
+./install-local --symlink
+
+# Or copy files to plugin cache
+./install-local
+```
+
+With `--symlink`, edits take effect immediately without reinstalling.
+
+### Workflow
+
+This plugin eats its own dogfood. Always use `/workbranch` to create a worktree before making changes:
+
+```bash
+# From the workbranch directory
+wb-new my-feature
+cd ../my-feature
+# ... make changes ...
+```
+
+See `CLAUDE.md` for shell script standards and hook schema.
+
+### Testing
+
+Run scripts directly:
+
+```bash
+./scripts/wb-list
+./scripts/wb-new test-branch
+./scripts/wb-rm ../test-branch --delete-branch
+```
+
 ## License
 
 MIT
