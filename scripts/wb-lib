@@ -1,0 +1,48 @@
+# wb-lib - Shared functions for workbranch scripts
+# Source this file, don't execute it
+
+# Get git root, exit if not in repo
+wb_require_git_root() {
+    local git_root
+    if ! git_root=$(git rev-parse --show-toplevel 2>/dev/null); then
+        echo "ERROR: Not in a git repository | ACTION: Navigate to a git repository first"
+        exit 1
+    fi
+    echo "$git_root"
+}
+
+# Get default branch with robust fallback (from wb-done's logic)
+wb_get_default_branch() {
+    local branch
+    branch=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo "")
+    if [[ -z "$branch" ]]; then
+        if git show-ref --verify --quiet refs/heads/main; then
+            branch="main"
+        elif git show-ref --verify --quiet refs/heads/master; then
+            branch="master"
+        fi
+    fi
+    echo "$branch"
+}
+
+# Normalize path (make absolute, resolve ..)
+# Works even if intermediate directories don't exist
+wb_normalize_path() {
+    local path="$1"
+    local base_dir="${2:-$(pwd)}"
+
+    # Make absolute if relative
+    if [[ "$path" != /* ]]; then
+        path="$base_dir/$path"
+    fi
+
+    # Use Python for reliable normalization (handles non-existent paths)
+    if command -v python3 &>/dev/null; then
+        python3 -c "import os; print(os.path.normpath('$path'))"
+    elif command -v perl &>/dev/null; then
+        perl -e 'use File::Spec; print File::Spec->canonpath($ARGV[0])' "$path"
+    else
+        # Pure bash fallback
+        echo "$path" | sed 's|/[^/]*/\.\./|/|g; s|/\./|/|g; s|//|/|g'
+    fi
+}

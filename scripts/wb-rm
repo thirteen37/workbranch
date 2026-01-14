@@ -4,6 +4,9 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/wb-lib"
+
 usage() {
     echo "Usage: wb-rm <worktree-path> [--delete-branch]"
     echo ""
@@ -33,18 +36,10 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Verify we're in a git repository
-if ! git_root=$(git rev-parse --show-toplevel 2>/dev/null); then
-    echo "ERROR: Not in a git repository | ACTION: Navigate to a git repository first"
-    exit 1
-fi
+git_root=$(wb_require_git_root)
 
-# Make path absolute if relative
-if [[ "$worktree_path" != /* ]]; then
-    worktree_path="$(pwd)/$worktree_path"
-fi
-
-# Normalize path (remove trailing slash, resolve ..)
-worktree_path=$(cd "$worktree_path" 2>/dev/null && pwd) || worktree_path="$worktree_path"
+# Normalize path (make absolute, resolve ..)
+worktree_path=$(wb_normalize_path "$worktree_path" "$(pwd)")
 
 # Check if worktree exists
 if ! git worktree list --porcelain | grep -q "^worktree $worktree_path$"; then
@@ -79,9 +74,7 @@ fi
 echo "Removing worktree at $worktree_path..."
 
 if ! git worktree remove "$worktree_path" 2>&1; then
-    # Try force remove if there are changes
-    echo "WARNING: Worktree has uncommitted changes"
-    echo "ERROR: Cannot remove worktree with uncommitted changes | ACTION: Commit or stash changes first, or use 'git worktree remove --force'"
+    echo "ERROR: Worktree has uncommitted changes | ACTION: Commit or stash changes before removing, or use 'rm -rf' to force"
     exit 1
 fi
 

@@ -4,6 +4,9 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/wb-lib"
+
 usage() {
     echo "Usage: wb-move <branch-name> [--commits N]"
     echo ""
@@ -56,14 +59,8 @@ if [[ -z "$branch_name" ]]; then
     usage
 fi
 
-# Get script directory for calling wb-new
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
 # Verify we're in a git repository
-if ! git_root=$(git rev-parse --show-toplevel 2>/dev/null); then
-    echo "ERROR: Not in a git repository | ACTION: Navigate to a git repository first"
-    exit 1
-fi
+git_root=$(wb_require_git_root)
 
 cd "$git_root"
 
@@ -112,7 +109,7 @@ else
     if [[ -n "$commit_count" ]]; then
         commits_to_move="$commit_count"
     fi
-    echo "WARNING: No remote branch '$remote_branch' found, cannot auto-detect divergence"
+    echo "WARNING: No remote branch '$remote_branch' found | ACTION: Push branch first or specify --commits manually"
 fi
 
 # Check if there's anything to move
@@ -163,7 +160,7 @@ fi
 # Create worktree using wb-new
 echo ""
 echo "Creating worktree..."
-if ! "$script_dir/wb-new" "$branch_name"; then
+if ! "$SCRIPT_DIR/wb-new" "$branch_name"; then
     # Restore state on failure
     echo ""
     echo "ERROR: Failed to create worktree | ACTION: Recovering original state..."
@@ -171,13 +168,17 @@ if ! "$script_dir/wb-new" "$branch_name"; then
     if [[ "$commits_to_move" -gt 0 && -n "$commits_to_cherry_pick" ]]; then
         echo "Restoring commits..."
         for commit in $commits_to_cherry_pick; do
-            git cherry-pick "$commit" >/dev/null 2>&1 || true
+            if ! git cherry-pick "$commit" >/dev/null 2>&1; then
+                echo "  - Could not restore commit $commit"
+            fi
         done
     fi
 
     if $stash_created; then
         echo "Restoring stashed changes..."
-        git stash pop >/dev/null 2>&1 || true
+        if ! git stash pop >/dev/null 2>&1; then
+            echo "  - Could not restore stashed changes"
+        fi
     fi
 
     echo "ERROR: Worktree creation failed but original state restored | ACTION: Fix the issue and try again"
@@ -202,10 +203,7 @@ if [[ -f "$config_file" ]]; then
 fi
 
 worktree_path=$(echo "$path_template" | sed "s|\\\$NAME|$branch_name|g; s|\${NAME}|$branch_name|g")
-if [[ "$worktree_path" != /* ]]; then
-    worktree_path="$git_root/$worktree_path"
-fi
-worktree_path=$(cd "$(dirname "$worktree_path")" 2>/dev/null && pwd)/$(basename "$worktree_path")
+worktree_path=$(wb_normalize_path "$worktree_path" "$git_root")
 
 # Cherry-pick commits in the worktree
 if [[ -n "$commits_to_cherry_pick" ]]; then
