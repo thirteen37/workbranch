@@ -26,7 +26,8 @@ shift
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --delete-branch) delete_branch=true ;;
-        *) echo "ERROR: Unknown option: $1 | ACTION: Use --delete-branch or no options"; exit 1 ;;
+        -h|--help) usage ;;
+        *) echo "ERROR: Unknown option: $1 | ACTION: Use -h or --help to see valid options"; exit 1 ;;
     esac
     shift
 done

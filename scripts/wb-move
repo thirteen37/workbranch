@@ -37,7 +37,7 @@ while [[ $# -gt 0 ]]; do
             usage
             ;;
         -*)
-            echo "ERROR: Unknown option: $1 | ACTION: Use --help to see valid options"
+            echo "ERROR: Unknown option: $1 | ACTION: Use -h or --help to see valid options"
             exit 1
             ;;
         *)

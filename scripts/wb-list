@@ -1,8 +1,22 @@
 #!/bin/bash
 # wb-list - List git worktrees with status information
+# Usage: wb-list [-h|--help]
 # Output format designed for Claude Code to parse
 
 set -euo pipefail
+
+usage() {
+    echo "Usage: wb-list"
+    echo ""
+    echo "Lists all git worktrees with status information."
+    echo "Shows branch name and ahead/behind count vs default branch."
+    exit 1
+}
+
+# Handle help flag
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+    usage
+fi
 
 # Get the git root directory
 if ! git_root=$(git rev-parse --show-toplevel 2>/dev/null); then

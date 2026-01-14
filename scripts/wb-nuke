@@ -28,7 +28,7 @@ while [[ $# -gt 0 ]]; do
         --wip) include_wip=true ;;
         --dry-run) dry_run=true ;;
         -h|--help) usage ;;
-        *) echo "ERROR: Unknown option: $1 | ACTION: Use --wip, --dry-run, or --help"; exit 1 ;;
+        *) echo "ERROR: Unknown option: $1 | ACTION: Use -h or --help to see valid options"; exit 1 ;;
     esac
     shift
 done
@@ -152,7 +152,7 @@ for entry in "${to_remove[@]}"; do
         fi
         ((removed_count++))
     else
-        echo "  ERROR: Failed to remove worktree (may have uncommitted changes)"
+        echo "  ERROR: Failed to remove worktree | ACTION: Check for uncommitted changes or use 'git worktree remove --force'"
         ((failed_count++))
     fi
 done
