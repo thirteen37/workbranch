@@ -12,11 +12,23 @@ Git worktree manager for Claude Code. Enables isolated development by creating w
 
 ## Installation
 
-```bash
-claude --plugin-dir /path/to/workbranch
+```
+/plugin marketplace add thirteen37/thirteen37-plugins
+/plugin install workbranch
 ```
 
-Or add to your Claude Code plugins directory.
+## Usage
+
+Tell Claude to use the workbranch skill when starting feature or bug fix work. Add this to your project's `CLAUDE.md`:
+
+```
+You must use the workbranch skill for all feature development and bug fixes.
+```
+
+Or include it in your prompt:
+
+- "Use the workbranch skill to set up a branch for the login feature"
+- "Fix the checkout bug using the workbranch skill"
 
 ## Configuration
 

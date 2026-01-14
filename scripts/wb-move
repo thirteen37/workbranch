@@ -1,0 +1,241 @@
+#!/bin/bash
+# wb-move - Move uncommitted changes and/or local commits from main to a new worktree
+# Usage: wb-move <branch-name> [--commits N]
+
+set -euo pipefail
+
+usage() {
+    echo "Usage: wb-move <branch-name> [--commits N]"
+    echo ""
+    echo "Moves changes from main/master to a new worktree."
+    echo "Handles both uncommitted changes and local commits ahead of remote."
+    echo ""
+    echo "Options:"
+    echo "  --commits N    Move last N commits (default: auto-detect divergence from origin)"
+    echo ""
+    echo "Examples:"
+    echo "  wb-move feature-login         # Move all divergent changes to new branch"
+    echo "  wb-move bugfix --commits 2    # Move last 2 commits to new branch"
+    exit 1
+}
+
+# Parse arguments
+branch_name=""
+commit_count=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --commits)
+            if [[ -z "${2:-}" ]]; then
+                echo "ERROR: --commits requires a number | ACTION: Specify how many commits to move"
+                exit 1
+            fi
+            commit_count="$2"
+            shift 2
+            ;;
+        -h|--help)
+            usage
+            ;;
+        -*)
+            echo "ERROR: Unknown option: $1 | ACTION: Use --help to see valid options"
+            exit 1
+            ;;
+        *)
+            if [[ -z "$branch_name" ]]; then
+                branch_name="$1"
+            else
+                echo "ERROR: Unexpected argument: $1 | ACTION: Only one branch name allowed"
+                exit 1
+            fi
+            shift
+            ;;
+    esac
+done
+
+if [[ -z "$branch_name" ]]; then
+    usage
+fi
+
+# Get script directory for calling wb-new
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Verify we're in a git repository
+if ! git_root=$(git rev-parse --show-toplevel 2>/dev/null); then
+    echo "ERROR: Not in a git repository | ACTION: Navigate to a git repository first"
+    exit 1
+fi
+
+cd "$git_root"
+
+# Get current branch
+current_branch=$(git rev-parse --abbrev-ref HEAD)
+
+# Verify we're on main or master
+if [[ "$current_branch" != "main" && "$current_branch" != "master" ]]; then
+    echo "ERROR: Not on main or master branch (currently on '$current_branch') | ACTION: This command is for rescuing changes from main/master"
+    exit 1
+fi
+
+# Check for uncommitted changes
+has_uncommitted=false
+if ! git diff --quiet || ! git diff --cached --quiet; then
+    has_uncommitted=true
+fi
+
+# Check for untracked files
+has_untracked=false
+if [[ -n $(git ls-files --others --exclude-standard) ]]; then
+    has_untracked=true
+fi
+
+# Determine commits to move
+commits_to_move=0
+remote_branch="origin/$current_branch"
+
+if git rev-parse --verify "$remote_branch" >/dev/null 2>&1; then
+    # Count commits ahead of remote
+    commits_ahead=$(git rev-list --count "$remote_branch..HEAD")
+
+    if [[ -n "$commit_count" ]]; then
+        # User specified commit count
+        if [[ "$commit_count" -gt "$commits_ahead" ]]; then
+            echo "ERROR: Requested $commit_count commits but only $commits_ahead ahead of $remote_branch | ACTION: Use a smaller number or omit --commits"
+            exit 1
+        fi
+        commits_to_move="$commit_count"
+    else
+        # Auto-detect: move all divergent commits
+        commits_to_move="$commits_ahead"
+    fi
+else
+    # No remote tracking branch
+    if [[ -n "$commit_count" ]]; then
+        commits_to_move="$commit_count"
+    fi
+    echo "WARNING: No remote branch '$remote_branch' found, cannot auto-detect divergence"
+fi
+
+# Check if there's anything to move
+if ! $has_uncommitted && ! $has_untracked && [[ "$commits_to_move" -eq 0 ]]; then
+    echo "ERROR: No changes to move | ACTION: You're already clean on $current_branch"
+    exit 1
+fi
+
+# Report what we'll move
+echo "Changes to move to '$branch_name':"
+if $has_uncommitted; then
+    echo "  - Uncommitted changes (staged and unstaged)"
+fi
+if $has_untracked; then
+    echo "  - Untracked files"
+fi
+if [[ "$commits_to_move" -gt 0 ]]; then
+    echo "  - $commits_to_move commit(s) ahead of $remote_branch"
+    git log --oneline -n "$commits_to_move" | sed 's/^/      /'
+fi
+echo ""
+
+# Stash uncommitted changes and untracked files
+stash_created=false
+if $has_uncommitted || $has_untracked; then
+    echo "Stashing uncommitted changes..."
+    if $has_untracked; then
+        git stash push -u -m "wb-move: changes for $branch_name"
+    else
+        git stash push -m "wb-move: changes for $branch_name"
+    fi
+    stash_created=true
+fi
+
+# If we have commits to move, we need to reset main after creating worktree
+# First, save the commit range
+commits_to_cherry_pick=""
+if [[ "$commits_to_move" -gt 0 ]]; then
+    commits_to_cherry_pick=$(git rev-list --reverse HEAD~"$commits_to_move"..HEAD)
+fi
+
+# Reset main to remote (before creating worktree so branch starts from right place)
+if [[ "$commits_to_move" -gt 0 ]]; then
+    echo "Resetting $current_branch to $remote_branch..."
+    git reset --hard "$remote_branch"
+fi
+
+# Create worktree using wb-new
+echo ""
+echo "Creating worktree..."
+if ! "$script_dir/wb-new" "$branch_name"; then
+    # Restore state on failure
+    echo ""
+    echo "ERROR: Failed to create worktree | ACTION: Recovering original state..."
+
+    if [[ "$commits_to_move" -gt 0 && -n "$commits_to_cherry_pick" ]]; then
+        echo "Restoring commits..."
+        for commit in $commits_to_cherry_pick; do
+            git cherry-pick "$commit" >/dev/null 2>&1 || true
+        done
+    fi
+
+    if $stash_created; then
+        echo "Restoring stashed changes..."
+        git stash pop >/dev/null 2>&1 || true
+    fi
+
+    echo "ERROR: Worktree creation failed but original state restored | ACTION: Fix the issue and try again"
+    exit 1
+fi
+
+# Get worktree path from wb-new output or calculate it
+# Read config to get path template
+config_file="$git_root/.workbranch"
+path_template="../\$NAME"
+
+if [[ -f "$config_file" ]]; then
+    while IFS='=' read -r key value || [[ -n "$key" ]]; do
+        [[ "$key" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "$key" ]] && continue
+        key=$(echo "$key" | xargs)
+        value=$(echo "$value" | sed 's/^["'"'"']//; s/["'"'"']$//')
+        case "$key" in
+            path) path_template="$value" ;;
+        esac
+    done < "$config_file"
+fi
+
+worktree_path=$(echo "$path_template" | sed "s|\\\$NAME|$branch_name|g; s|\${NAME}|$branch_name|g")
+if [[ "$worktree_path" != /* ]]; then
+    worktree_path="$git_root/$worktree_path"
+fi
+worktree_path=$(cd "$(dirname "$worktree_path")" 2>/dev/null && pwd)/$(basename "$worktree_path")
+
+# Cherry-pick commits in the worktree
+if [[ -n "$commits_to_cherry_pick" ]]; then
+    echo ""
+    echo "Cherry-picking commits to worktree..."
+    cd "$worktree_path"
+    for commit in $commits_to_cherry_pick; do
+        if ! git cherry-pick "$commit"; then
+            echo "WARNING: Cherry-pick failed for $commit | ACTION: Resolve conflicts in worktree manually"
+        fi
+    done
+    cd "$git_root"
+fi
+
+# Apply stashed changes in worktree
+if $stash_created; then
+    echo ""
+    echo "Applying stashed changes to worktree..."
+    cd "$worktree_path"
+    if ! git stash pop; then
+        echo "WARNING: Stash apply had conflicts | ACTION: Resolve conflicts in worktree"
+    fi
+    cd "$git_root"
+fi
+
+echo ""
+echo "SUCCESS: Changes moved to worktree at $worktree_path"
+echo "BRANCH: $branch_name"
+echo ""
+echo "Next steps:"
+echo "  1. Navigate to: $worktree_path"
+echo "  2. Continue development on the '$branch_name' branch"
+echo "  3. Main branch is now clean and matches $remote_branch"

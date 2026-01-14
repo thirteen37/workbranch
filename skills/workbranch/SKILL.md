@@ -1,6 +1,6 @@
 ---
 name: workbranch
-description: This skill should be used when starting work on a "new feature", "bug fix", "branch", "isolated development", when the user asks to "create a worktree", "set up a branch for development", "work on feature X", "fix bug Y", or when discussing git worktree management. Provides git worktree workflow that should be the DEFAULT approach for all feature and bugfix development.
+description: This skill should be used when starting work on a "new feature", "bug fix", "branch", "isolated development", when the user asks to "create a worktree", "set up a branch for development", "work on feature X", "fix bug Y", when discussing git worktree management, or when recovering from mistakes like "made changes on main by mistake", "accidentally committed to main", "forgot to create a worktree", "need to move changes to a branch". Provides git worktree workflow that should be the DEFAULT approach for all feature and bugfix development.
 version: 0.1.0
 ---
 
@@ -76,6 +76,28 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/wb-rm <worktree-path> [--delete-branch]
 - Removes the worktree directory
 - With `--delete-branch`: also deletes the branch (only if merged)
 - Fails if worktree has uncommitted changes
+
+### wb-move - Rescue Changes from Main
+
+Move uncommitted changes and/or local commits from main to a new worktree:
+
+```bash
+${CLAUDE_PLUGIN_ROOT}/scripts/wb-move <branch-name> [--commits N]
+```
+
+- Detects uncommitted changes and commits ahead of origin/main
+- Stashes uncommitted work, resets main to match remote
+- Creates new worktree and applies changes there
+- Use `--commits N` to move only the last N commits
+
+**Example usage**:
+```bash
+# Move all divergent changes to a new branch
+${CLAUDE_PLUGIN_ROOT}/scripts/wb-move feature-login
+
+# Move only the last 2 commits
+${CLAUDE_PLUGIN_ROOT}/scripts/wb-move hotfix-auth --commits 2
+```
 
 ## Workflow for Feature/Bug Development
 
@@ -184,6 +206,17 @@ After a PR is merged:
 - Suggest removing the worktree
 - Offer to delete the branch if merged
 
+### Recovering from Mistakes on Main
+
+When changes are accidentally made on main instead of a worktree:
+
+1. **Stop immediately**: Don't continue making changes
+2. **Run wb-move**: `wb-move <appropriate-branch-name>`
+3. **Navigate to worktree**: Move to the new worktree directory
+4. **Continue work**: Resume development on the feature branch
+
+This handles both uncommitted changes and local commits that diverged from origin/main.
+
 ## Script Locations
 
 All scripts are in the plugin's scripts directory:
@@ -191,6 +224,7 @@ All scripts are in the plugin's scripts directory:
 - `${CLAUDE_PLUGIN_ROOT}/scripts/wb-new`
 - `${CLAUDE_PLUGIN_ROOT}/scripts/wb-list`
 - `${CLAUDE_PLUGIN_ROOT}/scripts/wb-rm`
+- `${CLAUDE_PLUGIN_ROOT}/scripts/wb-move`
 - `${CLAUDE_PLUGIN_ROOT}/scripts/wb-nuke` (dangerous cleanup, user-invoked only)
 
 Execute scripts using their full path with `${CLAUDE_PLUGIN_ROOT}` for portability.
@@ -204,3 +238,5 @@ Execute scripts using their full path with `${CLAUDE_PLUGIN_ROOT}` for portabili
 | Create from branch | `wb-new <branch> <source>` |
 | Remove worktree | `wb-rm <path>` |
 | Remove + delete branch | `wb-rm <path> --delete-branch` |
+| Rescue changes from main | `wb-move <branch>` |
+| Rescue specific commits | `wb-move <branch> --commits N` |
