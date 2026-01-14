@@ -99,6 +99,39 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/wb-move feature-login
 ${CLAUDE_PLUGIN_ROOT}/scripts/wb-move hotfix-auth --commits 2
 ```
 
+### wb-done - Merge and Cleanup
+
+Finish work on a branch by merging to main and cleaning up:
+
+```bash
+${CLAUDE_PLUGIN_ROOT}/scripts/wb-done [options]
+```
+
+Run this from **within a feature worktree** when you're done with the branch.
+
+**Options**:
+- `--squash`: Squash all commits into one before merging
+- `--rebase`: Rebase onto target branch before merging
+- `--skip-merge`: Skip merge (use when already merged via PR)
+- `--target <branch>`: Target branch to merge into (default: auto-detect)
+- `--keep-remote`: Don't delete the remote branch
+- `--dry-run`: Show what would be done without executing
+
+**Example usage**:
+```bash
+# Standard merge + full cleanup
+${CLAUDE_PLUGIN_ROOT}/scripts/wb-done
+
+# Squash merge
+${CLAUDE_PLUGIN_ROOT}/scripts/wb-done --squash
+
+# Already merged via GitHub PR, just cleanup
+${CLAUDE_PLUGIN_ROOT}/scripts/wb-done --skip-merge
+
+# Preview what would happen
+${CLAUDE_PLUGIN_ROOT}/scripts/wb-done --dry-run
+```
+
 ## Workflow for Feature/Bug Development
 
 ### Starting Work
@@ -116,31 +149,35 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/wb-move hotfix-auth --commits 2
 
 ### Finishing Work
 
-There are two workflows for completing work, depending on your project's merge strategy:
+Use `wb-done` to complete work on a branch. Run it from within the feature worktree:
 
-#### Option A: With Pull Request
+```bash
+${CLAUDE_PLUGIN_ROOT}/scripts/wb-done
+```
+
+This handles the entire workflow: merge to main, push, remove worktree, and delete branches.
+
+#### Option A: Direct Merge (Default)
+
+From within your feature worktree, simply run:
+```bash
+wb-done              # Standard merge
+wb-done --squash     # Squash merge
+wb-done --rebase     # Rebase then merge
+```
+
+#### Option B: With Pull Request
 
 1. **Push branch**: `git push -u origin <branch-name>`
 2. **Create PR**: Open a pull request for code review
 3. **After merge**: Once the PR is merged, clean up:
    ```bash
-   wb-rm <worktree-path> --delete-branch
+   wb-done --skip-merge
    ```
 
-#### Option B: Direct Merge to Main (No PR)
+The `--skip-merge` flag skips the merge phase (since it's already merged via PR) and just cleans up the worktree and branches.
 
-For workflows that merge directly without a pull request:
-
-1. **Switch to main worktree**: Navigate to the main worktree directory
-2. **Update main**: `git pull` to ensure main is current
-3. **Merge the branch**: `git merge <branch-name>`
-4. **Push main**: `git push`
-5. **Clean up worktree**: Remove the feature worktree and its branch:
-   ```bash
-   wb-rm <worktree-path> --delete-branch
-   ```
-
-**Note**: The `--delete-branch` flag only deletes branches that have been merged. If you need to abandon unmerged work, use `git branch -D <branch>` manually after removing the worktree.
+**Note**: For manual cleanup without `wb-done`, use `wb-rm <path> --delete-branch`. This only deletes branches that have been merged. If you need to abandon unmerged work, use `git branch -D <branch>` manually after removing the worktree.
 
 ## Handling Existing WIP Worktrees
 
@@ -248,6 +285,7 @@ All scripts are in the plugin's scripts directory:
 - `${CLAUDE_PLUGIN_ROOT}/scripts/wb-list`
 - `${CLAUDE_PLUGIN_ROOT}/scripts/wb-rm`
 - `${CLAUDE_PLUGIN_ROOT}/scripts/wb-move`
+- `${CLAUDE_PLUGIN_ROOT}/scripts/wb-done`
 - `${CLAUDE_PLUGIN_ROOT}/scripts/wb-nuke` (dangerous cleanup, user-invoked only)
 
 Execute scripts using their full path with `${CLAUDE_PLUGIN_ROOT}` for portability.
@@ -259,6 +297,9 @@ Execute scripts using their full path with `${CLAUDE_PLUGIN_ROOT}` for portabili
 | List worktrees | `wb-list` |
 | Create worktree | `wb-new <branch>` |
 | Create from branch | `wb-new <branch> <source>` |
+| Finish work (merge + cleanup) | `wb-done` |
+| Finish with squash merge | `wb-done --squash` |
+| Cleanup after PR merge | `wb-done --skip-merge` |
 | Remove worktree | `wb-rm <path>` |
 | Remove + delete branch | `wb-rm <path> --delete-branch` |
 | Rescue changes from main | `wb-move <branch>` |

@@ -1,0 +1,256 @@
+#!/bin/bash
+# wb-done - Merge branch to main and cleanup worktree
+# Usage: wb-done [--squash|--rebase] [--skip-merge] [--target <branch>] [--keep-remote] [--dry-run]
+
+set -euo pipefail
+
+usage() {
+    echo "Usage: wb-done [options]"
+    echo ""
+    echo "Merges the current branch into main and cleans up the worktree."
+    echo "Run this from within a feature worktree when you're done with the branch."
+    echo ""
+    echo "Options:"
+    echo "  --squash        Squash all commits into one before merging"
+    echo "  --rebase        Rebase onto target branch before merging"
+    echo "  --skip-merge    Skip merge (use when already merged via PR)"
+    echo "  --target <branch>  Target branch to merge into (default: auto-detect)"
+    echo "  --keep-remote   Don't delete the remote branch"
+    echo "  --dry-run       Show what would be done without executing"
+    exit 1
+}
+
+# Parse arguments
+merge_strategy=""
+skip_merge=false
+target_branch=""
+keep_remote=false
+dry_run=false
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --squash)
+            merge_strategy="squash"
+            ;;
+        --rebase)
+            merge_strategy="rebase"
+            ;;
+        --skip-merge)
+            skip_merge=true
+            ;;
+        --target)
+            shift
+            if [[ $# -eq 0 ]]; then
+                echo "ERROR: --target requires a branch name | ACTION: Provide branch name after --target"
+                exit 1
+            fi
+            target_branch="$1"
+            ;;
+        --keep-remote)
+            keep_remote=true
+            ;;
+        --dry-run)
+            dry_run=true
+            ;;
+        -h|--help)
+            usage
+            ;;
+        *)
+            echo "ERROR: Unknown option: $1 | ACTION: Use -h or --help to see valid options"
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+# Verify we're in a git repository
+if ! git_root=$(git rev-parse --show-toplevel 2>/dev/null); then
+    echo "ERROR: Not in a git repository | ACTION: Navigate to a git repository first"
+    exit 1
+fi
+
+# Get current worktree path
+current_worktree=$(pwd)
+
+# Get main worktree
+main_worktree=$(git worktree list --porcelain | grep "^worktree " | head -1 | sed 's/^worktree //')
+
+# Check if we're in the main worktree
+if [[ "$current_worktree" == "$main_worktree" ]]; then
+    echo "ERROR: Cannot run wb-done from main worktree | ACTION: Navigate to a feature worktree first"
+    exit 1
+fi
+
+# Get current branch
+current_branch=$(git rev-parse --abbrev-ref HEAD)
+if [[ "$current_branch" == "HEAD" ]]; then
+    echo "ERROR: Detached HEAD state | ACTION: Checkout a branch first"
+    exit 1
+fi
+
+# Get default branch if target not specified
+if [[ -z "$target_branch" ]]; then
+    target_branch=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo "")
+    if [[ -z "$target_branch" ]]; then
+        # Fallback: check for main or master
+        if git show-ref --verify --quiet refs/heads/main; then
+            target_branch="main"
+        elif git show-ref --verify --quiet refs/heads/master; then
+            target_branch="master"
+        else
+            echo "ERROR: Cannot determine default branch | ACTION: Specify target with --target <branch>"
+            exit 1
+        fi
+    fi
+fi
+
+# Check for uncommitted changes
+if ! git diff --quiet || ! git diff --cached --quiet; then
+    echo "ERROR: Uncommitted changes in working directory | ACTION: Commit or stash changes first"
+    exit 1
+fi
+
+# Check if branch is already merged
+already_merged=false
+if git merge-base --is-ancestor "$current_branch" "$target_branch" 2>/dev/null; then
+    already_merged=true
+    if ! $skip_merge; then
+        echo "WARNING: Branch '$current_branch' is already merged into '$target_branch'"
+        skip_merge=true
+    fi
+fi
+
+# Check if remote branch exists
+remote_branch_exists=false
+if git ls-remote --exit-code --heads origin "$current_branch" >/dev/null 2>&1; then
+    remote_branch_exists=true
+fi
+
+# Print plan
+echo "=== wb-done ==="
+echo ""
+echo "Branch:       $current_branch"
+echo "Target:       $target_branch"
+echo "Worktree:     $current_worktree"
+echo "Main:         $main_worktree"
+echo ""
+
+if $skip_merge; then
+    echo "Merge:        SKIP (--skip-merge or already merged)"
+else
+    echo "Merge:        ${merge_strategy:-standard}"
+fi
+
+echo "Cleanup:      worktree + local branch"
+if $remote_branch_exists; then
+    if $keep_remote; then
+        echo "Remote:       KEEP (--keep-remote)"
+    else
+        echo "Remote:       DELETE origin/$current_branch"
+    fi
+else
+    echo "Remote:       (no remote branch)"
+fi
+echo ""
+
+if $dry_run; then
+    echo "DRY RUN - no changes made"
+    exit 0
+fi
+
+# Phase 1: Merge (unless skipped)
+if ! $skip_merge; then
+    echo "=== Merging ==="
+
+    # Fetch latest
+    echo "Fetching latest from origin..."
+    git fetch origin "$target_branch"
+
+    # Go to main worktree to perform merge
+    echo "Switching to main worktree..."
+    cd "$main_worktree"
+
+    # Ensure we're on target branch
+    git checkout "$target_branch"
+
+    # Pull latest
+    echo "Pulling latest $target_branch..."
+    git pull origin "$target_branch"
+
+    # Perform merge based on strategy
+    echo "Merging '$current_branch' into '$target_branch'..."
+
+    case "$merge_strategy" in
+        squash)
+            if ! git merge --squash "$current_branch"; then
+                echo "ERROR: Merge conflict during squash | ACTION: Resolve conflicts in $main_worktree, then run 'wb-done --skip-merge' from worktree"
+                exit 1
+            fi
+            # Squash merge requires a commit
+            git commit -m "Squash merge branch '$current_branch'"
+            ;;
+        rebase)
+            # For rebase strategy, we rebase the feature branch first, then fast-forward merge
+            cd "$current_worktree"
+            if ! git rebase "$target_branch"; then
+                echo "ERROR: Rebase conflict | ACTION: Resolve conflicts, run 'git rebase --continue', then run 'wb-done --skip-merge'"
+                exit 1
+            fi
+            cd "$main_worktree"
+            git merge --ff-only "$current_branch"
+            ;;
+        *)
+            if ! git merge --no-ff "$current_branch" -m "Merge branch '$current_branch'"; then
+                echo "ERROR: Merge conflict | ACTION: Resolve conflicts in $main_worktree, commit, then run 'wb-done --skip-merge' from worktree"
+                exit 1
+            fi
+            ;;
+    esac
+
+    # Push to remote
+    echo "Pushing $target_branch to origin..."
+    git push origin "$target_branch"
+
+    echo "Merge complete."
+    echo ""
+fi
+
+# Phase 2: Cleanup
+echo "=== Cleanup ==="
+
+# Make sure we're in main worktree for cleanup
+cd "$main_worktree"
+
+# Remove worktree
+echo "Removing worktree at $current_worktree..."
+if ! git worktree remove "$current_worktree" 2>&1; then
+    echo "ERROR: Failed to remove worktree | ACTION: Check for uncommitted changes or use 'git worktree remove --force $current_worktree'"
+    exit 1
+fi
+echo "Worktree removed."
+
+# Delete local branch
+echo "Deleting local branch '$current_branch'..."
+if git branch -d "$current_branch" 2>&1; then
+    echo "Local branch deleted."
+else
+    # Force delete if needed (branch was squash/rebase merged so -d might fail)
+    echo "WARNING: Branch not detected as merged (possibly squash/rebase), force deleting..."
+    git branch -D "$current_branch"
+    echo "Local branch force deleted."
+fi
+
+# Delete remote branch
+if $remote_branch_exists && ! $keep_remote; then
+    echo "Deleting remote branch 'origin/$current_branch'..."
+    if git push origin --delete "$current_branch" 2>&1; then
+        echo "Remote branch deleted."
+    else
+        echo "WARNING: Could not delete remote branch (may already be deleted)"
+    fi
+fi
+
+echo ""
+echo "=========="
+echo "SUCCESS: Branch '$current_branch' finished and cleaned up"
+echo "BRANCH: $current_branch (deleted)"

@@ -15,6 +15,7 @@ workbranch/
 │   ├── wb-list       # List worktrees with status
 │   ├── wb-rm         # Remove worktree
 │   ├── wb-move       # Rescue changes from main to worktree
+│   ├── wb-done       # Merge branch to main and cleanup worktree
 │   └── wb-nuke       # Bulk cleanup (dangerous)
 ├── skills/workbranch/SKILL.md   # Teaches Claude the worktree workflow
 ├── hooks/hooks.json             # PreToolUse hook to soft-block commits on main
