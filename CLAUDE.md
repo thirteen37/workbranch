@@ -70,6 +70,3 @@ The PreToolUse hook in `hooks/hooks.json` uses the prompt-based hook API. It ret
 - Branch names can contain `/` (e.g., `feature/login`, `fix/auth-bug`) - use `|` as sed delimiter instead of `/`
 - When writing regex patterns, ensure they handle slashes in branch names
 
-## Known Issues
-
-- `wb-new` fails with branch names containing `/` due to sed delimiter issue (needs fix)
