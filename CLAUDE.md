@@ -31,7 +31,9 @@ workbranch/
 │   ├── wb-rm         # Remove worktree
 │   ├── wb-move       # Rescue changes from main to worktree
 │   ├── wb-done       # Merge branch to main and cleanup worktree
-│   └── wb-nuke       # Bulk cleanup (dangerous)
+│   ├── wb-nuke       # Bulk cleanup (dangerous)
+│   ├── wb-lib        # Shared functions library
+│   └── wb-test       # Integration tests
 ├── skills/workbranch/SKILL.md   # Teaches Claude the worktree workflow
 ├── commands/nuke.md             # User-invocable cleanup command
 └── .claude-plugin/plugin.json   # Plugin manifest
@@ -125,9 +127,24 @@ sed "s/\$NAME/$branch_name/g"
 
 Scripts read configuration from `.workbranch` in the target project root (key=value format, colon-separated lists).
 
+### Dependencies
+
+Scripts must use only POSIX shell features and standard Unix utilities:
+- **Allowed**: bash, sed, awk, grep, cut, tr, sort, uniq, realpath, etc.
+- **Avoid**: Python, Perl, Ruby, or other interpreters
+
+This ensures scripts work on any system with a basic Unix environment. When a utility might not exist, provide a pure bash fallback.
+
 ## Testing Scripts
 
-Run scripts using the `wb` dispatcher or directly:
+Run the integration test suite:
+
+```bash
+./scripts/wb-test           # Run all tests
+./scripts/wb-test --verbose # Show detailed output
+```
+
+Or run scripts manually using the `wb` dispatcher or directly:
 
 ```bash
 # Using dispatcher

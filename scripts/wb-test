@@ -1,0 +1,242 @@
+#!/bin/bash
+# wb-test - Integration tests for workbranch scripts
+# Usage: wb-test [--verbose]
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VERBOSE=false
+TESTS_RUN=0
+TESTS_PASSED=0
+TESTS_FAILED=0
+
+# Colors (disabled if not a terminal)
+if [[ -t 1 ]]; then
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    YELLOW='\033[0;33m'
+    NC='\033[0m'
+else
+    RED='' GREEN='' YELLOW='' NC=''
+fi
+
+usage() {
+    echo "Usage: wb-test [--verbose]"
+    echo ""
+    echo "Run integration tests for workbranch scripts."
+    echo ""
+    echo "Options:"
+    echo "  --verbose    Show detailed output for each test"
+    echo "  -h, --help   Show this help message"
+    exit 0
+}
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --verbose) VERBOSE=true; shift ;;
+        -h|--help) usage ;;
+        *) echo "ERROR: Unknown option: $1 | ACTION: Use -h or --help to see valid options"; exit 1 ;;
+    esac
+done
+
+log() {
+    if $VERBOSE; then
+        echo "  $*"
+    fi
+}
+
+pass() {
+    ((TESTS_PASSED++))
+    ((TESTS_RUN++))
+    echo -e "${GREEN}PASS${NC}: $1"
+}
+
+fail() {
+    ((TESTS_FAILED++))
+    ((TESTS_RUN++))
+    echo -e "${RED}FAIL${NC}: $1"
+    if [[ -n "${2:-}" ]]; then
+        echo "      $2"
+    fi
+}
+
+# Setup test environment
+setup() {
+    TEST_DIR=$(mktemp -d)
+    log "Created test directory: $TEST_DIR"
+
+    # Create a bare repo to act as "origin"
+    ORIGIN_DIR="$TEST_DIR/origin.git"
+    git init --bare "$ORIGIN_DIR" >/dev/null 2>&1
+    log "Created bare origin repo: $ORIGIN_DIR"
+
+    # Create main working repo
+    REPO_DIR="$TEST_DIR/repo"
+    git clone "$ORIGIN_DIR" "$REPO_DIR" >/dev/null 2>&1
+    cd "$REPO_DIR"
+
+    # Initial commit
+    echo "test" > file.txt
+    git add file.txt
+    git commit -m "Initial commit" >/dev/null 2>&1
+    git push -u origin main >/dev/null 2>&1
+    log "Created repo with initial commit: $REPO_DIR"
+}
+
+# Cleanup test environment
+cleanup() {
+    if [[ -n "${TEST_DIR:-}" && -d "$TEST_DIR" ]]; then
+        rm -rf "$TEST_DIR"
+        log "Cleaned up test directory"
+    fi
+}
+
+trap cleanup EXIT
+
+# =============================================================================
+# Tests
+# =============================================================================
+
+test_wb_list_shows_main() {
+    local output
+    output=$("$SCRIPT_DIR/wb-list" 2>&1) || true
+    if echo "$output" | grep -q "branch: main"; then
+        pass "wb-list shows main branch"
+    else
+        fail "wb-list shows main branch" "Output: $output"
+    fi
+}
+
+test_wb_new_creates_worktree() {
+    local output
+    output=$("$SCRIPT_DIR/wb-new" test-branch 2>&1) || true
+
+    # Default path template is ../$NAME, so worktree is at $TEST_DIR/test-branch
+    if echo "$output" | grep -q "SUCCESS"; then
+        if [[ -d "$TEST_DIR/test-branch" ]]; then
+            pass "wb-new creates worktree"
+        else
+            fail "wb-new creates worktree" "Directory not found at $TEST_DIR/test-branch"
+        fi
+    else
+        fail "wb-new creates worktree" "Output: $output"
+    fi
+}
+
+test_wb_list_shows_new_worktree() {
+    local output
+    output=$("$SCRIPT_DIR/wb-list" 2>&1) || true
+    if echo "$output" | grep -q "test-branch"; then
+        pass "wb-list shows new worktree"
+    else
+        fail "wb-list shows new worktree" "Output: $output"
+    fi
+}
+
+test_wb_new_with_slash_in_name() {
+    local output
+    output=$("$SCRIPT_DIR/wb-new" feature/login 2>&1) || true
+
+    if echo "$output" | grep -q "SUCCESS"; then
+        pass "wb-new handles branch names with slashes"
+    else
+        fail "wb-new handles branch names with slashes" "Output: $output"
+    fi
+}
+
+test_wb_rm_removes_worktree() {
+    local output worktree_path
+    # First go back to main repo
+    cd "$REPO_DIR"
+
+    # Get actual worktree path from git (may differ from expected due to path resolution)
+    worktree_path=$(git worktree list --porcelain | grep "worktree.*test-branch" | sed 's/^worktree //')
+    log "Removing worktree at: $worktree_path"
+
+    if [[ -z "$worktree_path" ]]; then
+        fail "wb-rm removes worktree" "Could not find test-branch worktree"
+        return
+    fi
+
+    output=$("$SCRIPT_DIR/wb-rm" "$worktree_path" --delete-branch 2>&1) || true
+
+    if echo "$output" | grep -q "SUCCESS"; then
+        if [[ ! -d "$worktree_path" ]]; then
+            pass "wb-rm removes worktree"
+        else
+            fail "wb-rm removes worktree" "Directory still exists"
+        fi
+    else
+        fail "wb-rm removes worktree" "Output: $output"
+    fi
+}
+
+test_wb_lib_normalize_path() {
+    source "$SCRIPT_DIR/wb-lib"
+
+    local result
+    result=$(wb_normalize_path "/foo/bar/../baz")
+    if [[ "$result" == "/foo/baz" ]]; then
+        pass "wb_normalize_path resolves .."
+    else
+        fail "wb_normalize_path resolves .." "Expected /foo/baz, got $result"
+    fi
+}
+
+test_wb_lib_normalize_path_dot() {
+    source "$SCRIPT_DIR/wb-lib"
+
+    local result
+    result=$(wb_normalize_path "/foo/./bar")
+    if [[ "$result" == "/foo/bar" ]]; then
+        pass "wb_normalize_path resolves ."
+    else
+        fail "wb_normalize_path resolves ." "Expected /foo/bar, got $result"
+    fi
+}
+
+test_wb_lib_normalize_path_double_slash() {
+    source "$SCRIPT_DIR/wb-lib"
+
+    local result
+    result=$(wb_normalize_path "/foo//bar")
+    if [[ "$result" == "/foo/bar" ]]; then
+        pass "wb_normalize_path resolves //"
+    else
+        fail "wb_normalize_path resolves //" "Expected /foo/bar, got $result"
+    fi
+}
+
+# =============================================================================
+# Main
+# =============================================================================
+
+echo "Running workbranch integration tests..."
+echo ""
+
+setup
+
+# Run tests
+test_wb_list_shows_main
+test_wb_new_creates_worktree
+test_wb_list_shows_new_worktree
+test_wb_new_with_slash_in_name
+test_wb_rm_removes_worktree
+test_wb_lib_normalize_path
+test_wb_lib_normalize_path_dot
+test_wb_lib_normalize_path_double_slash
+
+# Summary
+echo ""
+echo "=========================================="
+echo "Tests run: $TESTS_RUN"
+echo -e "Passed: ${GREEN}$TESTS_PASSED${NC}"
+if [[ $TESTS_FAILED -gt 0 ]]; then
+    echo -e "Failed: ${RED}$TESTS_FAILED${NC}"
+    exit 1
+else
+    echo -e "Failed: $TESTS_FAILED"
+    echo ""
+    echo "All tests passed!"
+fi
