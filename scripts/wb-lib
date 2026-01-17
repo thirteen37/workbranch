@@ -1,5 +1,6 @@
 # wb-lib - Shared functions for workbranch scripts
 # Source this file, don't execute it
+# Requires: ZSH 5.0+
 
 # Get git root, exit if not in repo
 wb_require_git_root() {
@@ -13,8 +14,13 @@ wb_require_git_root() {
 
 # Get default branch with robust fallback (from wb-done's logic)
 wb_get_default_branch() {
-    local branch
-    branch=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo "")
+    local branch=""
+    local ref
+    # Try to get from remote HEAD (may fail if not set)
+    if ref=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null); then
+        branch="${ref#refs/remotes/origin/}"
+    fi
+    # Fallback to checking for main/master
     if [[ -z "$branch" ]]; then
         if git show-ref --verify --quiet refs/heads/main; then
             branch="main"
@@ -36,12 +42,80 @@ wb_normalize_path() {
         path="$base_dir/$path"
     fi
 
-    # Use realpath -m if available (GNU coreutils), otherwise pure sed
+    # Use realpath -m if available (GNU coreutils), otherwise pure ZSH
     # Note: macOS realpath doesn't support -m flag
     if realpath -m / &>/dev/null 2>&1; then
         realpath -m "$path"
     else
-        # Pure sed fallback (works on all systems)
-        echo "$path" | sed 's|/[^/]*/\.\./|/|g; s|/\./|/|g; s|//|/|g'
+        # Pure ZSH fallback using array splitting
+        local -a parts result
+        local part
+
+        # Split path by /
+        parts=("${(@s:/:)path}")
+
+        # Process each part
+        for part in "${parts[@]}"; do
+            if [[ "$part" == ".." ]]; then
+                # Go up one level (remove last element if exists)
+                if (( ${#result[@]} > 0 )); then
+                    result=("${result[@]:0:-1}")
+                fi
+            elif [[ "$part" != "." && -n "$part" ]]; then
+                result+=("$part")
+            fi
+        done
+
+        # Rejoin with /
+        echo "/${(j:/:)result}"
     fi
+}
+
+# Parse .workbranch config file into WB_CONFIG associative array
+# Usage: wb_parse_config /path/to/.workbranch
+# Sets global WB_CONFIG array with keys: copy, ignore, path, post_create, delete_branch
+wb_parse_config() {
+    local config_file="$1"
+
+    # Declare global associative array
+    typeset -gA WB_CONFIG
+
+    # Set defaults
+    WB_CONFIG=(
+        [copy]=""
+        [ignore]="node_modules:dist:.git"
+        [path]='../$NAME'
+        [post_create]=""
+        [delete_branch]="false"
+    )
+
+    # Return if config file doesn't exist
+    [[ -f "$config_file" ]] || return 0
+
+    local line key value
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        # Skip comments and empty lines
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "${line// /}" ]] && continue
+
+        # Split on first =
+        key="${line%%=*}"
+        value="${line#*=}"
+
+        # Trim whitespace from key
+        key="${key// /}"
+
+        # Remove surrounding quotes from value
+        value="${value#\"}"
+        value="${value%\"}"
+        value="${value#\'}"
+        value="${value%\'}"
+
+        # Store in array if key is valid
+        case "$key" in
+            copy|ignore|path|post_create|delete_branch)
+                WB_CONFIG[$key]="$value"
+                ;;
+        esac
+    done < "$config_file"
 }

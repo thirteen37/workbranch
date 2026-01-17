@@ -45,12 +45,15 @@ All scripts must follow these conventions for consistency.
 
 ### Script Header
 
-```bash
-#!/bin/bash
+```zsh
+#!/usr/bin/env zsh
 # wb-<name> - Brief description
 # Usage: wb-<name> <required-arg> [optional-arg] [--flag]
 
 set -euo pipefail
+
+SCRIPT_DIR="${0:A:h}"
+source "$SCRIPT_DIR/wb-lib"
 ```
 
 ### Usage Function
@@ -111,29 +114,42 @@ echo "BRANCH: <branch-name>"
 
 Bulk operations (wb-list, wb-nuke) have different output formats appropriate to their function.
 
-### Sed Delimiter
-
-Use `|` as sed delimiter to handle branch names with `/`:
-
-```bash
-# Correct
-sed "s|\$NAME|$branch_name|g"
-
-# Wrong - fails on feature/login
-sed "s/\$NAME/$branch_name/g"
-```
-
 ### Configuration
 
 Scripts read configuration from `.workbranch` in the target project root (key=value format, colon-separated lists).
 
 ### Dependencies
 
-Scripts must use only POSIX shell features and standard Unix utilities:
-- **Allowed**: bash, sed, awk, grep, cut, tr, sort, uniq, realpath, etc.
+Scripts require **ZSH 5.0+** and standard Unix utilities:
+- **ZSH**: Default on macOS, available via package manager on Linux
+- **Allowed utilities**: git, sed, grep, find, realpath, etc.
 - **Avoid**: Python, Perl, Ruby, or other interpreters
 
-This ensures scripts work on any system with a basic Unix environment. When a utility might not exist, provide a pure bash fallback.
+### ZSH Idioms
+
+Scripts use ZSH-specific features for cleaner code:
+
+```zsh
+# Script directory (instead of BASH_SOURCE dance)
+SCRIPT_DIR="${0:A:h}"
+
+# String substitution (instead of sed for simple cases)
+worktree_path="${path_template//\$NAME/$branch_name}"
+
+# Split string by delimiter (instead of IFS)
+patterns=("${(@s.:.)WB_CONFIG[copy]}")
+
+# Regex captures (instead of BASH_REMATCH)
+if [[ "$line" =~ '^worktree (.+)$' ]]; then
+    path="$match[1]"
+fi
+
+# Associative arrays for config
+typeset -gA WB_CONFIG
+WB_CONFIG[path]='../$NAME'
+```
+
+Note: ZSH regex patterns must be quoted in `[[ ]]` conditionals.
 
 ## Testing Scripts
 
@@ -161,8 +177,8 @@ wb rm ../test-branch --delete-branch
 ## Development Guidelines
 
 - **Use worktrees for all changes**: See MANDATORY section at top of this file. Never commit directly to main.
-- Branch names can contain `/` (e.g., `feature/login`, `fix/auth-bug`) - use `|` as sed delimiter instead of `/`
-- When writing regex patterns, ensure they handle slashes in branch names
+- Branch names can contain `/` (e.g., `feature/login`, `fix/auth-bug`) - use ZSH `${//}` substitution instead of sed
+- When writing regex patterns, ensure they are quoted and handle slashes in branch names
 
 ## Known Issues
 

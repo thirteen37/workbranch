@@ -1,10 +1,10 @@
-#!/bin/bash
+#!/usr/bin/env zsh
 # wb-test - Integration tests for workbranch scripts
 # Usage: wb-test [--verbose]
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="${0:A:h}"
 VERBOSE=false
 TESTS_RUN=0
 TESTS_PASSED=0
@@ -47,14 +47,14 @@ log() {
 }
 
 pass() {
-    ((TESTS_PASSED++))
-    ((TESTS_RUN++))
+    ((++TESTS_PASSED))
+    ((++TESTS_RUN))
     echo -e "${GREEN}PASS${NC}: $1"
 }
 
 fail() {
-    ((TESTS_FAILED++))
-    ((TESTS_RUN++))
+    ((++TESTS_FAILED))
+    ((++TESTS_RUN))
     echo -e "${RED}FAIL${NC}: $1"
     if [[ -n "${2:-}" ]]; then
         echo "      $2"
@@ -208,6 +208,71 @@ test_wb_lib_normalize_path_double_slash() {
     fi
 }
 
+test_wb_parse_config_defaults() {
+    source "$SCRIPT_DIR/wb-lib"
+
+    # Parse non-existent config (should use defaults)
+    wb_parse_config "/nonexistent/path/.workbranch"
+
+    if [[ "${WB_CONFIG[path]}" == '../$NAME' ]]; then
+        pass "wb_parse_config sets default path"
+    else
+        fail "wb_parse_config sets default path" "Expected '../\$NAME', got '${WB_CONFIG[path]}'"
+    fi
+}
+
+test_wb_parse_config_reads_file() {
+    source "$SCRIPT_DIR/wb-lib"
+
+    # Create temp config
+    local temp_config
+    temp_config=$(mktemp)
+    echo 'copy=.env*:.vscode' > "$temp_config"
+    echo 'path=../worktrees/$NAME' >> "$temp_config"
+    echo 'post_create=npm install' >> "$temp_config"
+
+    wb_parse_config "$temp_config"
+
+    local passed=true
+    if [[ "${WB_CONFIG[copy]}" != ".env*:.vscode" ]]; then
+        fail "wb_parse_config reads copy" "Expected '.env*:.vscode', got '${WB_CONFIG[copy]}'"
+        passed=false
+    fi
+    if [[ "${WB_CONFIG[path]}" != '../worktrees/$NAME' ]]; then
+        fail "wb_parse_config reads path" "Expected '../worktrees/\$NAME', got '${WB_CONFIG[path]}'"
+        passed=false
+    fi
+    if [[ "${WB_CONFIG[post_create]}" != "npm install" ]]; then
+        fail "wb_parse_config reads post_create" "Expected 'npm install', got '${WB_CONFIG[post_create]}'"
+        passed=false
+    fi
+
+    rm -f "$temp_config"
+
+    if $passed; then
+        pass "wb_parse_config reads file correctly"
+    fi
+}
+
+test_wb_parse_config_handles_quotes() {
+    source "$SCRIPT_DIR/wb-lib"
+
+    # Create temp config with quoted values
+    local temp_config
+    temp_config=$(mktemp)
+    echo 'post_create="npm install && npm test"' > "$temp_config"
+
+    wb_parse_config "$temp_config"
+
+    if [[ "${WB_CONFIG[post_create]}" == "npm install && npm test" ]]; then
+        pass "wb_parse_config handles quoted values"
+    else
+        fail "wb_parse_config handles quoted values" "Expected 'npm install && npm test', got '${WB_CONFIG[post_create]}'"
+    fi
+
+    rm -f "$temp_config"
+}
+
 # =============================================================================
 # Main
 # =============================================================================
@@ -226,6 +291,9 @@ test_wb_rm_removes_worktree
 test_wb_lib_normalize_path
 test_wb_lib_normalize_path_dot
 test_wb_lib_normalize_path_double_slash
+test_wb_parse_config_defaults
+test_wb_parse_config_reads_file
+test_wb_parse_config_handles_quotes
 
 # Summary
 echo ""

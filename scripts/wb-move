@@ -1,10 +1,10 @@
-#!/bin/bash
+#!/usr/bin/env zsh
 # wb-move - Move uncommitted changes and/or local commits from main to a new worktree
 # Usage: wb-move <branch-name> [--commits N]
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="${0:A:h}"
 source "$SCRIPT_DIR/wb-lib"
 
 usage() {
@@ -167,7 +167,7 @@ if ! "$SCRIPT_DIR/wb-new" "$branch_name"; then
 
     if [[ "$commits_to_move" -gt 0 && -n "$commits_to_cherry_pick" ]]; then
         echo "Restoring commits..."
-        for commit in $commits_to_cherry_pick; do
+        for commit in ${=commits_to_cherry_pick}; do
             if ! git cherry-pick "$commit" >/dev/null 2>&1; then
                 echo "  - Could not restore commit $commit"
             fi
@@ -185,24 +185,12 @@ if ! "$SCRIPT_DIR/wb-new" "$branch_name"; then
     exit 1
 fi
 
-# Get worktree path from wb-new output or calculate it
-# Read config to get path template
-config_file="$git_root/.workbranch"
-path_template="../\$NAME"
+# Get worktree path using shared config parsing
+wb_parse_config "$git_root/.workbranch"
 
-if [[ -f "$config_file" ]]; then
-    while IFS='=' read -r key value || [[ -n "$key" ]]; do
-        [[ "$key" =~ ^[[:space:]]*# ]] && continue
-        [[ -z "$key" ]] && continue
-        key=$(echo "$key" | xargs)
-        value=$(echo "$value" | sed 's/^["'"'"']//; s/["'"'"']$//')
-        case "$key" in
-            path) path_template="$value" ;;
-        esac
-    done < "$config_file"
-fi
-
-worktree_path=$(echo "$path_template" | sed "s|\\\$NAME|$branch_name|g; s|\${NAME}|$branch_name|g")
+# Expand path template using ZSH substitution
+worktree_path="${WB_CONFIG[path]//\$NAME/$branch_name}"
+worktree_path="${worktree_path//\$\{NAME\}/$branch_name}"
 worktree_path=$(wb_normalize_path "$worktree_path" "$git_root")
 
 # Cherry-pick commits in the worktree
@@ -210,7 +198,7 @@ if [[ -n "$commits_to_cherry_pick" ]]; then
     echo ""
     echo "Cherry-picking commits to worktree..."
     cd "$worktree_path"
-    for commit in $commits_to_cherry_pick; do
+    for commit in ${=commits_to_cherry_pick}; do
         if ! git cherry-pick "$commit"; then
             echo "WARNING: Cherry-pick failed for $commit | ACTION: Resolve conflicts in worktree manually"
         fi
