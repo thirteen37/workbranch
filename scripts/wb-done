@@ -92,7 +92,7 @@ done
 git_root=$(wb_require_git_root)
 
 # Get main worktree (first in list)
-main_worktree=$(git worktree list --porcelain | grep "^worktree " | head -1 | sed 's/^worktree //')
+main_worktree=$(wb_get_main_worktree)
 
 # Determine mode based on source_branch argument
 running_from_main=false

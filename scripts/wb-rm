@@ -64,7 +64,7 @@ while IFS= read -r line; do
 done < <(git worktree list --porcelain)
 
 # Check if this is the main worktree
-main_worktree=$(git worktree list --porcelain | grep "^worktree " | head -1 | sed 's/^worktree //')
+main_worktree=$(wb_get_main_worktree)
 if [[ "$worktree_path" == "$main_worktree" ]]; then
     echo "ERROR: Cannot remove main worktree | ACTION: This is the primary repository, not a worktree"
     exit 1
