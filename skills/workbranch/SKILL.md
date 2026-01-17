@@ -120,6 +120,7 @@ wb done [branch-name] [options]
 - `--target <branch>`: Target branch to merge into (default: auto-detect)
 - `--keep-remote`: Don't delete the remote branch
 - `--dry-run`: Show what would be done without executing
+- `--discard-changes`: Discard uncommitted changes and force removal (DANGEROUS)
 
 #### Preferred Usage (from main worktree)
 
@@ -277,7 +278,7 @@ ERROR: <message> | ACTION: <what to do>
 | Not in a git repository | Navigate to a git repository first |
 | Worktree already exists | Use existing worktree or remove with wb rm |
 | Branch already checked out | Remove the other worktree first |
-| Uncommitted changes | Commit or stash changes first |
+| Uncommitted changes | Commit or stash changes, or use `--discard-changes` to force |
 | Cannot delete unmerged branch | Use `git branch -D` to force delete |
 
 When an error occurs, read the ACTION portion and follow the guidance.
