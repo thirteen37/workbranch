@@ -31,6 +31,11 @@ wb_get_default_branch() {
     echo "$branch"
 }
 
+# Get the main (primary) worktree path
+wb_get_main_worktree() {
+    git worktree list --porcelain | awk '/^worktree / { print substr($0, 10); exit }'
+}
+
 # Normalize path (make absolute, resolve ..)
 # Works even if intermediate directories don't exist
 wb_normalize_path() {
@@ -44,7 +49,7 @@ wb_normalize_path() {
 
     # Use realpath -m if available (GNU coreutils), otherwise pure ZSH
     # Note: macOS realpath doesn't support -m flag
-    if realpath -m / &>/dev/null 2>&1; then
+    if realpath -m / &>/dev/null; then
         realpath -m "$path"
     else
         # Pure ZSH fallback using array splitting

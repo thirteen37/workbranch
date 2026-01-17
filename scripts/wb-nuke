@@ -47,7 +47,7 @@ if [[ -z "$default_branch" ]]; then
 fi
 
 # Get main worktree (cannot be removed)
-main_worktree=$(git worktree list --porcelain | grep "^worktree " | head -1 | sed 's/^worktree //')
+main_worktree=$(wb_get_main_worktree)
 
 echo "Analyzing worktrees..."
 echo "Default branch: $default_branch"
