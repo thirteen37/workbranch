@@ -6,7 +6,18 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CACHE_DIR="$HOME/.claude/plugins/cache"
-PLUGIN_DIR="$CACHE_DIR/thirteen37-plugins/workbranch/0.1.0"
+MARKETPLACE="thirteen37-plugins"  # Matches marketplace repo name
+
+# Read name and version from plugin.json
+PLUGIN_JSON="$SCRIPT_DIR/.claude-plugin/plugin.json"
+if [[ ! -f "$PLUGIN_JSON" ]]; then
+    echo "ERROR: plugin.json not found | ACTION: Ensure .claude-plugin/plugin.json exists"
+    exit 1
+fi
+
+PLUGIN_NAME=$(grep '"name"' "$PLUGIN_JSON" | head -1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+PLUGIN_VERSION=$(grep '"version"' "$PLUGIN_JSON" | sed 's/.*: *"\([^"]*\)".*/\1/')
+PLUGIN_DIR="$CACHE_DIR/$MARKETPLACE/$PLUGIN_NAME/$PLUGIN_VERSION"
 
 usage() {
     echo "Usage: install-local [--symlink]"
