@@ -106,10 +106,12 @@ wb move hotfix-auth --commits 2
 Finish work on a branch by merging to main and cleaning up:
 
 ```bash
-wb done [options]
+wb done [branch-name] [options]
 ```
 
-Run this from **within a feature worktree** when you're done with the branch.
+**Modes**:
+- `wb done <branch>` — Run from **main worktree**, specify branch to merge (recommended)
+- `wb done` — Run from **feature worktree**, infers branch from HEAD (legacy)
 
 **Options**:
 - `--squash`: Squash all commits into one before merging
@@ -119,42 +121,39 @@ Run this from **within a feature worktree** when you're done with the branch.
 - `--keep-remote`: Don't delete the remote branch
 - `--dry-run`: Show what would be done without executing
 
-**Example usage**:
+#### Preferred Usage (from main worktree)
+
+Run from the main worktree with the branch name as argument. This avoids the deleted-directory problem:
+
 ```bash
-# Standard merge + full cleanup
+# From main worktree
+wb done feature-branch        # Standard merge + cleanup
+wb done feature-branch --squash   # Squash merge
+wb done feature-branch --skip-merge   # Already merged via PR
+wb done feature-branch --dry-run      # Preview what would happen
+```
+
+#### Legacy Usage (from feature worktree)
+
+Running from within a feature worktree still works but requires immediate navigation:
+
+```bash
+# From feature worktree
 wb done
-cd /path/to/main/worktree  # IMPORTANT: Navigate away immediately!
-
-# Squash merge
-wb done --squash
-cd /path/to/main/worktree  # IMPORTANT: Navigate away immediately!
-
-# Already merged via GitHub PR, just cleanup
-wb done --skip-merge
-cd /path/to/main/worktree  # IMPORTANT: Navigate away immediately!
-
-# Preview what would happen
-wb done --dry-run
+cd /path/to/main  # IMPORTANT: Navigate away immediately!
 ```
 
 ---
 
-**CRITICAL WARNING: Working Directory Deletion**
+**EXECUTE Output for Claude**
 
-`wb done` **DELETES YOUR CURRENT DIRECTORY**. After running `wb done`:
+When running `wb done` from a feature worktree, the script outputs an `EXECUTE:` line at the end:
 
-1. The feature worktree directory is removed
-2. Your shell's working directory no longer exists
-3. **ALL subsequent commands will fail** with ENOENT errors
-
-**You MUST immediately run:**
-```bash
-cd <path-shown-in-NAVIGATE-output>
+```
+EXECUTE: cd /path/to/main/worktree
 ```
 
-The script outputs a `NAVIGATE:` line with the exact path. Copy and run it.
-
-If you forget, every bash command will fail until you navigate to a valid directory.
+**When you see `EXECUTE:` in script output, immediately run that command.**
 
 ---
 
@@ -175,42 +174,46 @@ If you forget, every bash command will fail until you navigate to a valid direct
 
 ### Finishing Work
 
-Use `wb done` to complete work on a branch. Run it from within the feature worktree:
+Use `wb done` to complete work on a branch. The **recommended approach** is to run from the main worktree with the branch name:
 
 ```bash
-wb done
-cd /path/to/main/worktree  # REQUIRED: See CRITICAL WARNING above
+# From main worktree (recommended)
+wb done feature-branch
 ```
 
 This handles the entire workflow: merge to main, push, remove worktree, and delete branches.
 
-**REMEMBER**: After `wb done` completes, immediately navigate to the main worktree as shown in the output. The feature worktree directory no longer exists.
-
 #### Option A: Direct Merge (Default)
 
-From within your feature worktree:
+From the main worktree:
 ```bash
-wb done              # Standard merge
-cd /path/to/main     # Then navigate away!
-
-wb done --squash     # Squash merge
-cd /path/to/main     # Then navigate away!
-
-wb done --rebase     # Rebase then merge
-cd /path/to/main     # Then navigate away!
+wb done feature-branch              # Standard merge
+wb done feature-branch --squash     # Squash merge
+wb done feature-branch --rebase     # Rebase then merge
 ```
 
 #### Option B: With Pull Request
 
 1. **Push branch**: `git push -u origin <branch-name>`
 2. **Create PR**: Open a pull request for code review
-3. **After merge**: Once the PR is merged, clean up:
+3. **After merge**: Once the PR is merged, clean up from main worktree:
    ```bash
-   wb done --skip-merge
-   cd /path/to/main     # Then navigate away!
+   wb done feature-branch --skip-merge
    ```
 
 The `--skip-merge` flag skips the merge phase (since it's already merged via PR) and just cleans up the worktree and branches.
+
+#### Legacy: Running from Feature Worktree
+
+You can still run `wb done` from within a feature worktree (without a branch argument). In this case, you **must** navigate away immediately after completion:
+
+```bash
+# From feature worktree
+wb done
+cd /path/to/main  # REQUIRED - directory was deleted!
+```
+
+The script outputs `EXECUTE: cd /path/to/main` which should be run immediately.
 
 **Note**: For manual cleanup without `wb done`, use `wb rm <path> --delete-branch`. This only deletes branches that have been merged. If you need to abandon unmerged work, use `git branch -D <branch>` manually after removing the worktree.
 
@@ -325,9 +328,9 @@ All scripts are in `${CLAUDE_PLUGIN_ROOT}/scripts/`:
 | List worktrees | `wb list` |
 | Create worktree | `wb new <branch>` |
 | Create from branch | `wb new <branch> <source>` |
-| Finish work (merge + cleanup) | `wb done` then `cd <main>` |
-| Finish with squash merge | `wb done --squash` then `cd <main>` |
-| Cleanup after PR merge | `wb done --skip-merge` then `cd <main>` |
+| Finish work (merge + cleanup) | `wb done <branch>` (from main) |
+| Finish with squash merge | `wb done <branch> --squash` (from main) |
+| Cleanup after PR merge | `wb done <branch> --skip-merge` (from main) |
 | Remove worktree | `wb rm <path>` |
 | Remove + delete branch | `wb rm <path> --delete-branch` |
 | Rescue changes from main | `wb move <branch>` |

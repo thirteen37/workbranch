@@ -8,10 +8,13 @@ SCRIPT_DIR="${0:A:h}"
 source "$SCRIPT_DIR/wb-lib"
 
 usage() {
-    echo "Usage: wb-done [options]"
+    echo "Usage: wb-done [branch-name] [options]"
     echo ""
-    echo "Merges the current branch into main and cleans up the worktree."
-    echo "Run this from within a feature worktree when you're done with the branch."
+    echo "Merges a branch into main and cleans up the worktree."
+    echo ""
+    echo "Modes:"
+    echo "  wb-done <branch>   Run from main worktree, specify branch to merge (recommended)"
+    echo "  wb-done            Run from feature worktree, infers branch from HEAD"
     echo ""
     echo "Options:"
     echo "  --squash        Squash all commits into one before merging"
@@ -23,12 +26,31 @@ usage() {
     exit 1
 }
 
+# Helper: find worktree path for a branch name
+find_worktree_for_branch() {
+    local branch="$1"
+    git worktree list --porcelain | awk -v branch="$branch" '
+        /^worktree / { path = substr($0, 10) }
+        /^branch refs\/heads\// {
+            b = substr($0, 19)
+            if (b == branch) print path
+        }
+    '
+}
+
 # Parse arguments
 merge_strategy=""
 skip_merge=false
 target_branch=""
 keep_remote=false
 dry_run=false
+source_branch=""
+
+# Check if first argument is a branch name (not a flag)
+if [[ $# -gt 0 && ! "$1" =~ ^- ]]; then
+    source_branch="$1"
+    shift
+fi
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -69,23 +91,45 @@ done
 # Verify we're in a git repository
 git_root=$(wb_require_git_root)
 
-# Get current worktree path
-current_worktree=$(pwd)
-
-# Get main worktree
+# Get main worktree (first in list)
 main_worktree=$(git worktree list --porcelain | grep "^worktree " | head -1 | sed 's/^worktree //')
 
-# Check if we're in the main worktree
-if [[ "$current_worktree" == "$main_worktree" ]]; then
-    echo "ERROR: Cannot run wb-done from main worktree | ACTION: Navigate to a feature worktree first"
-    exit 1
-fi
+# Determine mode based on source_branch argument
+running_from_main=false
+if [[ -n "$source_branch" ]]; then
+    # Mode: running from main with branch argument
+    current_dir=$(pwd)
+    if [[ "$current_dir" != "$main_worktree" ]]; then
+        echo "ERROR: When specifying a branch, must run from main worktree | ACTION: cd $main_worktree and run 'wb done $source_branch'"
+        exit 1
+    fi
+    running_from_main=true
 
-# Get current branch
-current_branch=$(git rev-parse --abbrev-ref HEAD)
-if [[ "$current_branch" == "HEAD" ]]; then
-    echo "ERROR: Detached HEAD state | ACTION: Checkout a branch first"
-    exit 1
+    # Find the worktree for this branch
+    feature_worktree=$(find_worktree_for_branch "$source_branch")
+    if [[ -z "$feature_worktree" ]]; then
+        echo "ERROR: No worktree found for branch '$source_branch' | ACTION: Check branch name with 'wb list'"
+        exit 1
+    fi
+
+    current_branch="$source_branch"
+    current_worktree="$feature_worktree"
+else
+    # Mode: running from feature worktree (legacy)
+    current_worktree=$(pwd)
+
+    # Check if we're in the main worktree (not allowed in this mode)
+    if [[ "$current_worktree" == "$main_worktree" ]]; then
+        echo "ERROR: Cannot run wb-done from main worktree without branch argument | ACTION: Specify branch: 'wb done <branch-name>' or navigate to a feature worktree"
+        exit 1
+    fi
+
+    # Get current branch from HEAD
+    current_branch=$(git rev-parse --abbrev-ref HEAD)
+    if [[ "$current_branch" == "HEAD" ]]; then
+        echo "ERROR: Detached HEAD state | ACTION: Checkout a branch first"
+        exit 1
+    fi
 fi
 
 # Get default branch if target not specified
@@ -97,10 +141,18 @@ if [[ -z "$target_branch" ]]; then
     fi
 fi
 
-# Check for uncommitted changes
-if ! git diff --quiet || ! git diff --cached --quiet; then
-    echo "ERROR: Uncommitted changes in working directory | ACTION: Commit or stash changes first"
-    exit 1
+# Check for uncommitted changes in the feature worktree
+if $running_from_main; then
+    # Need to check the feature worktree, not current directory
+    if ! git -C "$current_worktree" diff --quiet || ! git -C "$current_worktree" diff --cached --quiet; then
+        echo "ERROR: Uncommitted changes in worktree $current_worktree | ACTION: Commit or stash changes first"
+        exit 1
+    fi
+else
+    if ! git diff --quiet || ! git diff --cached --quiet; then
+        echo "ERROR: Uncommitted changes in working directory | ACTION: Commit or stash changes first"
+        exit 1
+    fi
 fi
 
 # Check if branch is already merged
@@ -256,6 +308,11 @@ echo ""
 echo "=========="
 echo "SUCCESS: Branch '$current_branch' finished and cleaned up"
 echo "BRANCH: $current_branch (deleted)"
-echo ""
-echo "IMPORTANT: Your current directory has been deleted."
-echo "NAVIGATE: cd $main_worktree"
+
+if ! $running_from_main; then
+    # Running from feature worktree - directory was deleted, need to navigate
+    echo ""
+    echo "IMPORTANT: Your current directory has been deleted."
+    echo "NAVIGATE: cd $main_worktree"
+    echo "EXECUTE: cd $main_worktree"
+fi
