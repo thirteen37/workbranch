@@ -1,6 +1,6 @@
 {
   "name": "workbranch",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Git worktree manager for isolated development. Creates worktrees for features and bugfixes with automatic config file copying and post-create hooks.",
   "author": {
     "name": "Yu-Xi Lim",
