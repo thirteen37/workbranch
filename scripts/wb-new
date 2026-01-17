@@ -1,10 +1,10 @@
-#!/bin/bash
+#!/usr/bin/env zsh
 # wb-new - Create a new git worktree with config file copying
 # Usage: wb-new <branch-name> [source-branch]
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="${0:A:h}"
 source "$SCRIPT_DIR/wb-lib"
 
 usage() {
@@ -33,36 +33,12 @@ source_branch="${2:-HEAD}"
 # Verify we're in a git repository
 git_root=$(wb_require_git_root)
 
-# Load configuration
-config_file="$git_root/.workbranch"
-copy_patterns=""
-ignore_patterns="node_modules:dist:.git"
-path_template="../\$NAME"
-post_create=""
-delete_branch="false"
+# Load configuration using shared function
+wb_parse_config "$git_root/.workbranch"
 
-if [[ -f "$config_file" ]]; then
-    while IFS='=' read -r key value || [[ -n "$key" ]]; do
-        # Skip comments and empty lines
-        [[ "$key" =~ ^[[:space:]]*# ]] && continue
-        [[ -z "$key" ]] && continue
-
-        # Remove leading/trailing whitespace and quotes
-        key=$(echo "$key" | xargs)
-        value=$(echo "$value" | sed 's/^["'"'"']//; s/["'"'"']$//')
-
-        case "$key" in
-            copy) copy_patterns="$value" ;;
-            ignore) ignore_patterns="$value" ;;
-            path) path_template="$value" ;;
-            post_create) post_create="$value" ;;
-            delete_branch) delete_branch="$value" ;;
-        esac
-    done < "$config_file"
-fi
-
-# Expand path template (use | delimiter to handle branch names with /)
-worktree_path=$(echo "$path_template" | sed "s|\\\$NAME|$branch_name|g; s|\${NAME}|$branch_name|g")
+# Expand path template using ZSH substitution (handles / in branch names)
+worktree_path="${WB_CONFIG[path]//\$NAME/$branch_name}"
+worktree_path="${worktree_path//\$\{NAME\}/$branch_name}"
 
 # Normalize path (make absolute if relative, resolve ..)
 worktree_path=$(wb_normalize_path "$worktree_path" "$git_root")
@@ -97,23 +73,23 @@ fi
 echo "Worktree created successfully."
 
 # Copy config files if patterns specified
-if [[ -n "$copy_patterns" ]]; then
+if [[ -n "${WB_CONFIG[copy]}" ]]; then
     echo "Copying config files..."
 
-    # Build rsync exclude args
-    exclude_args=()
-    IFS=':' read -ra IGNORE <<< "$ignore_patterns"
-    for pattern in "${IGNORE[@]}"; do
-        exclude_args+=(--exclude "$pattern")
-    done
+    # Split patterns using ZSH parameter expansion
+    local -a patterns
+    patterns=("${(@s.:.)WB_CONFIG[copy]}")
+
+    # Split ignore patterns
+    local -a ignore_patterns
+    ignore_patterns=("${(@s.:.)WB_CONFIG[ignore]}")
 
     # Process each copy pattern
-    IFS=':' read -ra PATTERNS <<< "$copy_patterns"
-    for pattern in "${PATTERNS[@]}"; do
-        # Use find to get matching files, then rsync each
+    for pattern in "${patterns[@]}"; do
+        # Use find to get matching files
         while IFS= read -r -d '' file; do
             rel_path="${file#$git_root/}"
-            dest_dir="$worktree_path/$(dirname "$rel_path")"
+            dest_dir="$worktree_path/${rel_path:h}"
             mkdir -p "$dest_dir"
             if ! cp -a "$file" "$dest_dir/" 2>/dev/null; then
                 echo "WARNING: Could not copy $file | ACTION: You may need to copy this file manually"
@@ -121,10 +97,10 @@ if [[ -n "$copy_patterns" ]]; then
         done < <(find "$git_root" -path "$git_root/.git" -prune -o -name "$pattern" -print0 2>/dev/null)
 
         # Also try glob expansion for directory patterns
-        for file in "$git_root"/$pattern; do
+        for file in "$git_root"/$~pattern(N); do
             if [[ -e "$file" ]]; then
                 rel_path="${file#$git_root/}"
-                dest_dir="$worktree_path/$(dirname "$rel_path")"
+                dest_dir="$worktree_path/${rel_path:h}"
                 mkdir -p "$dest_dir"
                 if ! cp -a "$file" "$dest_dir/" 2>/dev/null; then
                     echo "WARNING: Could not copy $file | ACTION: You may need to copy this file manually"
@@ -137,18 +113,20 @@ if [[ -n "$copy_patterns" ]]; then
 fi
 
 # Run post-create commands
-if [[ -n "$post_create" ]]; then
+if [[ -n "${WB_CONFIG[post_create]}" ]]; then
     echo "Running post-create commands..."
     cd "$worktree_path"
 
     # Handle multi-line post_create (newline or semicolon separated)
-    while IFS= read -r cmd || [[ -n "$cmd" ]]; do
-        [[ -z "$cmd" ]] && continue
+    local -a commands
+    commands=("${(@s.;.)WB_CONFIG[post_create]}")
+    for cmd in "${commands[@]}"; do
+        [[ -z "${cmd// /}" ]] && continue
         echo "  Running: $cmd"
         if ! eval "$cmd"; then
             echo "WARNING: Post-create command failed: $cmd | ACTION: You may need to run this manually"
         fi
-    done <<< "$(echo "$post_create" | tr ';' '\n')"
+    done
 
     echo "Post-create commands completed."
 fi

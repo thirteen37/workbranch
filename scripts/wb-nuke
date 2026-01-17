@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env zsh
 # wb-nuke - Clean up merged worktrees (and optionally WIP worktrees)
 # Usage: wb-nuke [--wip] [--dry-run]
 #
@@ -6,7 +6,7 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="${0:A:h}"
 source "$SCRIPT_DIR/wb-lib"
 
 usage() {
@@ -61,7 +61,7 @@ current_worktree=""
 current_branch=""
 
 while IFS= read -r line || [[ -n "$line" ]]; do
-    if [[ "$line" =~ ^worktree\ (.+)$ ]]; then
+    if [[ "$line" =~ '^worktree (.+)$' ]]; then
         # Process previous worktree
         if [[ -n "$current_worktree" && "$current_worktree" != "$main_worktree" && -n "$current_branch" ]]; then
             # Check if branch is merged (using merge-base to avoid regex issues with branch names)
@@ -71,10 +71,10 @@ while IFS= read -r line || [[ -n "$line" ]]; do
                 wip_worktrees+=("$current_worktree|$current_branch")
             fi
         fi
-        current_worktree="${BASH_REMATCH[1]}"
+        current_worktree="$match[1]"
         current_branch=""
-    elif [[ "$line" =~ ^branch\ refs/heads/(.+)$ ]]; then
-        current_branch="${BASH_REMATCH[1]}"
+    elif [[ "$line" =~ '^branch refs/heads/(.+)$' ]]; then
+        current_branch="$match[1]"
     fi
 done < <(git worktree list --porcelain)
 
@@ -93,7 +93,8 @@ if [[ ${#merged_worktrees[@]} -eq 0 ]]; then
     echo "  (none)"
 else
     for entry in "${merged_worktrees[@]}"; do
-        IFS='|' read -r path branch <<< "$entry"
+        local path="${entry%%|*}"
+        local branch="${entry#*|}"
         echo "  $path ($branch)"
     done
 fi
@@ -104,7 +105,8 @@ if [[ ${#wip_worktrees[@]} -eq 0 ]]; then
     echo "  (none)"
 else
     for entry in "${wip_worktrees[@]}"; do
-        IFS='|' read -r path branch <<< "$entry"
+        local path="${entry%%|*}"
+        local branch="${entry#*|}"
         echo "  $path ($branch)"
     done
 fi
@@ -125,7 +127,8 @@ fi
 if $dry_run; then
     echo "DRY RUN - Would remove:"
     for entry in "${to_remove[@]}"; do
-        IFS='|' read -r path branch <<< "$entry"
+        local path="${entry%%|*}"
+        local branch="${entry#*|}"
         echo "  Worktree: $path"
         echo "  Branch: $branch"
         echo ""
@@ -140,7 +143,8 @@ removed_count=0
 failed_count=0
 
 for entry in "${to_remove[@]}"; do
-    IFS='|' read -r path branch <<< "$entry"
+    local path="${entry%%|*}"
+    local branch="${entry#*|}"
     echo ""
     echo "Removing: $path ($branch)"
 
@@ -154,10 +158,10 @@ for entry in "${to_remove[@]}"; do
         else
             echo "  WARNING: Could not delete branch | ACTION: Use 'git branch -D $branch' to force delete"
         fi
-        ((removed_count++))
+        ((++removed_count))
     else
         echo "  ERROR: Failed to remove worktree | ACTION: Check for uncommitted changes or use 'git worktree remove --force'"
-        ((failed_count++))
+        ((++failed_count))
     fi
 done
 

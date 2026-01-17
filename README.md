@@ -10,6 +10,12 @@ Git worktree manager for Claude Code. Enables isolated development by creating w
 - **Commit protection**: Soft-blocks commits on main/master, suggests worktree instead
 - **Cleanup command**: `/workbranch:nuke` to clean up merged worktrees
 
+## Requirements
+
+- **ZSH 5.0+** - Scripts are written in ZSH for cleaner idioms and better string handling
+  - macOS: ZSH is the default shell (since Catalina)
+  - Linux: Install via package manager (`apt install zsh`, `dnf install zsh`, etc.)
+
 ## Installation
 
 ```
