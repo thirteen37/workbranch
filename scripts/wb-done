@@ -23,6 +23,7 @@ usage() {
     echo "  --target <branch>  Target branch to merge into (default: auto-detect)"
     echo "  --keep-remote   Don't delete the remote branch"
     echo "  --dry-run       Show what would be done without executing"
+    echo "  --discard-changes  Discard uncommitted changes (DANGEROUS)"
     exit 1
 }
 
@@ -44,6 +45,7 @@ skip_merge=false
 target_branch=""
 keep_remote=false
 dry_run=false
+discard_changes=false
 source_branch=""
 
 # Check if first argument is a branch name (not a flag)
@@ -76,6 +78,9 @@ while [[ $# -gt 0 ]]; do
             ;;
         --dry-run)
             dry_run=true
+            ;;
+        --discard-changes)
+            discard_changes=true
             ;;
         -h|--help)
             usage
@@ -142,15 +147,23 @@ if [[ -z "$target_branch" ]]; then
 fi
 
 # Check for uncommitted changes in the feature worktree
+has_uncommitted=false
 if $running_from_main; then
     # Need to check the feature worktree, not current directory
     if ! git -C "$current_worktree" diff --quiet || ! git -C "$current_worktree" diff --cached --quiet; then
-        echo "ERROR: Uncommitted changes in worktree $current_worktree | ACTION: Commit or stash changes first"
-        exit 1
+        has_uncommitted=true
     fi
 else
     if ! git diff --quiet || ! git diff --cached --quiet; then
-        echo "ERROR: Uncommitted changes in working directory | ACTION: Commit or stash changes first"
+        has_uncommitted=true
+    fi
+fi
+
+if $has_uncommitted; then
+    if $discard_changes; then
+        echo "WARNING: Uncommitted changes will be discarded"
+    else
+        echo "ERROR: Uncommitted changes in worktree $current_worktree | ACTION: Commit or stash changes, or use --discard-changes to force"
         exit 1
     fi
 fi
@@ -277,9 +290,16 @@ cd "$main_worktree"
 
 # Remove worktree
 echo "Removing worktree at $current_worktree..."
-if ! git worktree remove "$current_worktree" 2>&1; then
-    echo "ERROR: Failed to remove worktree | ACTION: Check for uncommitted changes or use 'git worktree remove --force $current_worktree'"
-    exit 1
+if $discard_changes; then
+    if ! git worktree remove --force "$current_worktree" 2>&1; then
+        echo "ERROR: Failed to remove worktree | ACTION: Check 'git worktree list' for issues"
+        exit 1
+    fi
+else
+    if ! git worktree remove "$current_worktree" 2>&1; then
+        echo "ERROR: Failed to remove worktree | ACTION: Check for uncommitted changes or use --discard-changes"
+        exit 1
+    fi
 fi
 echo "Worktree removed."
 

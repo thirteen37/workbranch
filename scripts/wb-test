@@ -273,6 +273,55 @@ test_wb_parse_config_handles_quotes() {
     rm -f "$temp_config"
 }
 
+test_wb_done_discard_changes() {
+    cd "$REPO_DIR"
+
+    # Create a new worktree for testing
+    local output
+    output=$("$SCRIPT_DIR/wb-new" test-discard 2>&1) || true
+    if ! echo "$output" | grep -q "SUCCESS"; then
+        fail "wb-done --discard-changes (setup)" "Failed to create worktree: $output"
+        return
+    fi
+
+    # Find the worktree path
+    local worktree_path
+    worktree_path=$(git worktree list --porcelain | grep "worktree.*test-discard" | sed 's/^worktree //')
+    if [[ -z "$worktree_path" ]]; then
+        fail "wb-done --discard-changes (setup)" "Could not find test-discard worktree"
+        return
+    fi
+
+    # Create uncommitted changes in the worktree (modify existing tracked file)
+    echo "modified content" >> "$worktree_path/file.txt"
+    log "Modified tracked file in $worktree_path"
+
+    # Ensure we're in main worktree for wb-done (resolve symlinks for macOS /var -> /private/var)
+    cd "$REPO_DIR"
+    cd "$(pwd -P)"
+
+    # Verify wb-done without --discard-changes fails
+    output=$("$SCRIPT_DIR/wb-done" test-discard --skip-merge 2>&1) || true
+    if echo "$output" | grep -q "ERROR.*Uncommitted changes"; then
+        log "wb-done correctly rejected uncommitted changes"
+    else
+        fail "wb-done rejects uncommitted changes" "Expected error, got: $output"
+        return
+    fi
+
+    # Verify wb-done --discard-changes succeeds
+    output=$("$SCRIPT_DIR/wb-done" test-discard --skip-merge --discard-changes 2>&1) || true
+    if echo "$output" | grep -q "SUCCESS"; then
+        if [[ ! -d "$worktree_path" ]]; then
+            pass "wb-done --discard-changes removes dirty worktree"
+        else
+            fail "wb-done --discard-changes removes dirty worktree" "Worktree still exists at $worktree_path"
+        fi
+    else
+        fail "wb-done --discard-changes removes dirty worktree" "Output: $output"
+    fi
+}
+
 # =============================================================================
 # Main
 # =============================================================================
@@ -294,6 +343,7 @@ test_wb_lib_normalize_path_double_slash
 test_wb_parse_config_defaults
 test_wb_parse_config_reads_file
 test_wb_parse_config_handles_quotes
+test_wb_done_discard_changes
 
 # Summary
 echo ""
