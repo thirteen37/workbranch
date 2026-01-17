@@ -180,6 +180,18 @@ wb rm ../test-branch --delete-branch
 - Branch names can contain `/` (e.g., `feature/login`, `fix/auth-bug`) - use ZSH `${//}` substitution instead of sed
 - When writing regex patterns, ensure they are quoted and handle slashes in branch names
 
+## Releasing
+
+To release a new version:
+
+1. Create a GitHub release with a `v`-prefixed tag (e.g., `v0.3.0`)
+2. The release workflow automatically:
+   - Updates version in `plugin.json` and `SKILL.md`
+   - Commits and pushes the changes
+   - Notifies the marketplace to update its version listing
+
+Verify the workflow succeeded by checking the repository's Actions tab.
+
 ## Known Issues
 
 None currently tracked.
