@@ -4,8 +4,8 @@
 
 **Before making ANY code changes to this repository:**
 
-1. Run `git branch --show-current` to check current branch
-2. If on `main` or `master`, STOP and create a worktree first:
+1. Run `wb status` to check current location
+2. If `LOCATION: main` and `ON_DEFAULT: true`, STOP and create a worktree first:
    ```bash
    wb new <descriptive-branch-name>
    ```
@@ -28,6 +28,7 @@ workbranch/
 │   ├── wb            # Unified dispatcher (wb <subcommand>)
 │   ├── wb-new        # Create worktree with config copying
 │   ├── wb-list       # List worktrees with status
+│   ├── wb-status     # Show current worktree status
 │   ├── wb-rm         # Remove worktree
 │   ├── wb-move       # Rescue changes from main to worktree
 │   ├── wb-done       # Merge branch to main and cleanup worktree

@@ -24,6 +24,7 @@ usage() {
     echo "  move <branch> [--commits N]  Move changes from main"
     echo "  done [options]               Merge and cleanup"
     echo "  nuke [--wip] [--dry-run]     Bulk cleanup"
+    echo "  status [options]             Show worktree status"
     echo ""
     echo "Run 'wb <command> -h' for command-specific help."
     exit 1
@@ -37,7 +38,7 @@ cmd="$1"
 shift
 
 case "$cmd" in
-    new|list|rm|move|done|nuke)
+    new|list|rm|move|done|nuke|status)
         exec "$SCRIPT_DIR/wb-$cmd" "$@"
         ;;
     -h|--help|help)

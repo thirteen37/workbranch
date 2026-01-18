@@ -1,0 +1,128 @@
+#!/usr/bin/env zsh
+# wb-status - Show current worktree status for pre-flight checks
+# Usage: wb-status [--json] [--check-main] [--check-worktree]
+
+set -euo pipefail
+
+SCRIPT_DIR="${0:A:h}"
+source "$SCRIPT_DIR/wb-lib"
+
+usage() {
+    echo "Usage: wb-status [options]"
+    echo ""
+    echo "Show current worktree status for pre-flight checks."
+    echo ""
+    echo "Options:"
+    echo "  --json            Output as JSON"
+    echo "  --check-main      Exit 0 if on main worktree AND default branch, 1 otherwise"
+    echo "  --check-worktree  Exit 0 if in feature worktree, 1 otherwise"
+    echo "  -h, --help        Show this help"
+    exit 1
+}
+
+# Parse arguments
+output_format="text"
+check_mode=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --json)
+            output_format="json"
+            shift
+            ;;
+        --check-main)
+            check_mode="main"
+            shift
+            ;;
+        --check-worktree)
+            check_mode="worktree"
+            shift
+            ;;
+        -h|--help)
+            usage
+            ;;
+        *)
+            echo "ERROR: Unknown option: $1 | ACTION: Use -h or --help to see valid options"
+            exit 1
+            ;;
+    esac
+done
+
+# Get git root (validates we're in a repo)
+git_root=$(wb_require_git_root)
+
+# Get current branch
+current_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+
+# Get default branch
+default_branch=$(wb_get_default_branch)
+
+# Check if on default branch
+if [[ "$current_branch" == "$default_branch" ]]; then
+    on_default="true"
+else
+    on_default="false"
+fi
+
+# Get main worktree path
+main_worktree=$(wb_get_main_worktree)
+
+# Get current worktree path (the git root of current location)
+current_worktree="$git_root"
+
+# Determine if we're in main worktree or a feature worktree
+if [[ "$current_worktree" == "$main_worktree" ]]; then
+    location="main"
+else
+    location="worktree"
+fi
+
+# Check for dirty working tree
+if git diff --quiet 2>/dev/null && git diff --cached --quiet 2>/dev/null; then
+    dirty="false"
+else
+    dirty="true"
+fi
+
+# Handle check modes (exit code based)
+if [[ -n "$check_mode" ]]; then
+    case "$check_mode" in
+        main)
+            if [[ "$location" == "main" && "$on_default" == "true" ]]; then
+                exit 0
+            else
+                exit 1
+            fi
+            ;;
+        worktree)
+            if [[ "$location" == "worktree" ]]; then
+                exit 0
+            else
+                exit 1
+            fi
+            ;;
+    esac
+fi
+
+# Output results
+if [[ "$output_format" == "json" ]]; then
+    cat <<EOF
+{
+  "location": "$location",
+  "branch": "$current_branch",
+  "default_branch": "$default_branch",
+  "on_default": $on_default,
+  "worktree_path": "$current_worktree",
+  "main_worktree": "$main_worktree",
+  "dirty": $dirty
+}
+EOF
+else
+    echo "LOCATION: $location"
+    echo "BRANCH: $current_branch"
+    echo "DEFAULT_BRANCH: $default_branch"
+    echo "ON_DEFAULT: $on_default"
+    echo "WORKTREE_PATH: $current_worktree"
+    echo "MAIN_WORKTREE: $main_worktree"
+    echo "DIRTY: $dirty"
+fi
