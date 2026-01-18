@@ -67,6 +67,34 @@ Output includes:
 
 Run this to check existing worktrees before creating new ones.
 
+### wb status - Pre-flight Check
+
+Check current location before making changes:
+
+```bash
+wb status
+```
+
+**Output fields**:
+- LOCATION: `main` or `worktree`
+- BRANCH: Current branch name
+- DEFAULT_BRANCH: Repository default (main/master)
+- ON_DEFAULT: Whether on default branch
+- WORKTREE_PATH: Current worktree path
+- MAIN_WORKTREE: Main worktree path
+- DIRTY: Whether uncommitted changes exist
+
+**Options**:
+- `--json`: JSON output
+- `--check-main`: Exit 0 if on main, 1 otherwise
+- `--check-worktree`: Exit 0 if in worktree, 1 otherwise
+
+**Pre-flight pattern**:
+```bash
+wb status
+# If LOCATION: main and ON_DEFAULT: true, run 'wb new <branch>' first
+```
+
 ### wb rm - Remove Worktree
 
 Remove a worktree when done:
@@ -320,12 +348,13 @@ This handles both uncommitted changes and local commits that diverged from origi
 ## Script Locations
 
 All scripts are in `${CLAUDE_PLUGIN_ROOT}/scripts/`:
-- `wb` — unified dispatcher (routes to `wb-new`, `wb-list`, `wb-rm`, `wb-move`, `wb-done`, `wb-nuke`)
+- `wb` — unified dispatcher (routes to `wb-new`, `wb-list`, `wb-status`, `wb-rm`, `wb-move`, `wb-done`, `wb-nuke`)
 
 ## Quick Reference
 
 | Task | Command |
 |------|---------|
+| Check status (pre-flight) | `wb status` |
 | List worktrees | `wb list` |
 | Create worktree | `wb new <branch>` |
 | Create from branch | `wb new <branch> <source>` |

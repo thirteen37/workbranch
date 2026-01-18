@@ -74,6 +74,7 @@ The plugin includes shell scripts that can be used standalone:
 
 - `wb-new <branch> [source]` - Create worktree with config file copying
 - `wb-list` - List worktrees with status
+- `wb-status [options]` - Check current worktree/branch status
 - `wb-rm <path> [--delete-branch]` - Remove worktree
 - `wb-nuke [--wip]` - Clean up merged (and optionally WIP) worktrees
 
