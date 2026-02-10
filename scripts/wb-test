@@ -322,6 +322,91 @@ test_wb_done_discard_changes() {
     fi
 }
 
+test_no_remote() {
+    # Create a local-only repo (no remote)
+    local local_repo
+    local_repo="$TEST_DIR/local-only"
+    mkdir -p "$local_repo"
+    cd "$local_repo"
+    git init >/dev/null 2>&1
+    git config user.email "test@example.com"
+    git config user.name "Test User"
+
+    # Initial commit
+    echo "test" > file.txt
+    git add file.txt
+    git commit -m "Initial commit" >/dev/null 2>&1
+    log "Created local-only repo: $local_repo"
+
+    # Test wb-new works without remote
+    local output
+    output=$("$SCRIPT_DIR/wb-new" feature-no-remote 2>&1) || true
+    if echo "$output" | grep -q "SUCCESS"; then
+        pass "wb-new works without remote"
+    else
+        fail "wb-new works without remote" "Output: $output"
+        return
+    fi
+
+    # Test wb-list works without remote
+    output=$("$SCRIPT_DIR/wb-list" 2>&1) || true
+    if echo "$output" | grep -q "feature-no-remote"; then
+        pass "wb-list works without remote"
+    else
+        fail "wb-list works without remote" "Output: $output"
+    fi
+
+    # Make a change in the worktree
+    local worktree_path
+    worktree_path="$TEST_DIR/feature-no-remote"
+    echo "change" >> "$worktree_path/file.txt"
+    cd "$worktree_path"
+    git add file.txt
+    git commit -m "Change" >/dev/null 2>&1
+
+    # Return to main worktree and resolve symlinks (for macOS)
+    cd "$local_repo"
+    cd "$(pwd -P)"
+
+    # Test wb-done --local-only works
+    output=$("$SCRIPT_DIR/wb-done" feature-no-remote --local-only 2>&1) || true
+    if echo "$output" | grep -q "SUCCESS"; then
+        pass "wb-done --local-only works without remote"
+    else
+        fail "wb-done --local-only works without remote" "Output: $output"
+        return
+    fi
+
+    # Create another worktree to test warning
+    "$SCRIPT_DIR/wb-new" feature-remote-test >/dev/null 2>&1
+    worktree_path="$TEST_DIR/feature-remote-test"
+    echo "change" >> "$worktree_path/file.txt"
+    cd "$worktree_path"
+    git add file.txt
+    git commit -m "Change" >/dev/null 2>&1
+
+    # Return to main worktree and resolve symlinks (for macOS)
+    cd "$local_repo"
+    cd "$(pwd -P)"
+
+    # Test that wb-done without --skip-merge warns about no remote
+    output=$("$SCRIPT_DIR/wb-done" feature-remote-test 2>&1) || true
+    if echo "$output" | grep -q "No remote configured"; then
+        pass "wb-done warns about no remote"
+    else
+        fail "wb-done warns about no remote" "Output: $output"
+    fi
+
+    # Cleanup the test worktree (if it still exists)
+    cd "$local_repo"
+    cd "$(pwd -P)"
+    git worktree remove --force "$TEST_DIR/feature-remote-test" 2>/dev/null || true
+    git branch -D feature-remote-test 2>/dev/null || true
+
+    # Return to original test repo
+    cd "$REPO_DIR"
+}
+
 # =============================================================================
 # Main
 # =============================================================================
@@ -344,6 +429,7 @@ test_wb_parse_config_defaults
 test_wb_parse_config_reads_file
 test_wb_parse_config_handles_quotes
 test_wb_done_discard_changes
+test_no_remote
 
 # Summary
 echo ""

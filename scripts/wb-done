@@ -22,6 +22,7 @@ usage() {
     echo "  --skip-merge    Skip merge (use when already merged via PR)"
     echo "  --target <branch>  Target branch to merge into (default: auto-detect)"
     echo "  --keep-remote   Don't delete the remote branch"
+    echo "  --local-only    Skip all remote operations (fetch/pull/push/delete)"
     echo "  --dry-run       Show what would be done without executing"
     echo "  --discard-changes  Discard uncommitted changes (DANGEROUS)"
     exit 1
@@ -44,6 +45,7 @@ merge_strategy=""
 skip_merge=false
 target_branch=""
 keep_remote=false
+local_only=false
 dry_run=false
 discard_changes=false
 source_branch=""
@@ -76,6 +78,9 @@ while [[ $# -gt 0 ]]; do
         --keep-remote)
             keep_remote=true
             ;;
+        --local-only)
+            local_only=true
+            ;;
         --dry-run)
             dry_run=true
             ;;
@@ -95,6 +100,45 @@ done
 
 # Verify we're in a git repository
 git_root=$(wb_require_git_root)
+
+# Check if running in sandbox
+if wb_detect_sandbox; then
+    cat <<EOF
+ERROR: Running in sandbox environment with restricted write access | ACTION: Use one of these approaches:
+  1. Run outside sandbox (turn off sandbox with /sandbox command)
+  2. Use read-only commands: wb-list, wb-status
+  3. Use dry-run mode: wb-done --dry-run, wb-nuke --dry-run
+EOF
+    exit 1
+fi
+
+# Detect remote availability
+remote_name=$(wb_get_remote)
+has_remote=false
+remote_reachable=false
+
+if [[ -n "$remote_name" ]]; then
+    has_remote=true
+    if wb_check_remote_reachable "$remote_name"; then
+        remote_reachable=true
+    fi
+fi
+
+# Check for conflicts between flags and remote availability
+if ! $has_remote && ! $skip_merge; then
+    echo "WARNING: No remote configured - enabling --skip-merge and --keep-remote"
+    skip_merge=true
+    keep_remote=true
+fi
+
+if ! $remote_reachable && ! $skip_merge && ! $local_only; then
+    echo "WARNING: Remote not reachable (sandbox/network) - consider using --local-only"
+fi
+
+if $local_only; then
+    skip_merge=true
+    keep_remote=true
+fi
 
 # Get main worktree (first in list)
 main_worktree=$(wb_get_main_worktree)
@@ -180,8 +224,10 @@ fi
 
 # Check if remote branch exists
 remote_branch_exists=false
-if git ls-remote --exit-code --heads origin "$current_branch" >/dev/null 2>&1; then
-    remote_branch_exists=true
+if $has_remote && [[ -n "$remote_name" ]]; then
+    if git ls-remote --exit-code --heads "$remote_name" "$current_branch" >/dev/null 2>&1; then
+        remote_branch_exists=true
+    fi
 fi
 
 # Print plan
@@ -201,10 +247,10 @@ fi
 
 echo "Cleanup:      worktree + local branch"
 if $remote_branch_exists; then
-    if $keep_remote; then
-        echo "Remote:       KEEP (--keep-remote)"
+    if $keep_remote || ! $remote_reachable; then
+        echo "Remote:       KEEP ($([[ $keep_remote == true ]] && echo '--keep-remote' || echo 'not reachable'))"
     else
-        echo "Remote:       DELETE origin/$current_branch"
+        echo "Remote:       DELETE $remote_name/$current_branch"
     fi
 else
     echo "Remote:       (no remote branch)"
@@ -218,11 +264,16 @@ fi
 
 # Phase 1: Merge (unless skipped)
 if ! $skip_merge; then
+    if ! $has_remote || ! $remote_reachable; then
+        echo "ERROR: Cannot merge without reachable remote | ACTION: Use --skip-merge for local-only operation or fix remote connection"
+        exit 1
+    fi
+
     echo "=== Merging ==="
 
     # Fetch latest
-    echo "Fetching latest from origin..."
-    if ! git fetch origin "$target_branch" 2>&1; then
+    echo "Fetching latest from $remote_name..."
+    if ! git fetch "$remote_name" "$target_branch" 2>&1; then
         echo "ERROR: Failed to fetch $target_branch | ACTION: Check network connection and remote access"
         exit 1
     fi
@@ -239,7 +290,7 @@ if ! $skip_merge; then
 
     # Pull latest
     echo "Pulling latest $target_branch..."
-    if ! git pull origin "$target_branch" 2>&1; then
+    if ! git pull "$remote_name" "$target_branch" 2>&1; then
         echo "ERROR: Failed to pull $target_branch | ACTION: Check for merge conflicts or network issues"
         exit 1
     fi
@@ -274,9 +325,12 @@ if ! $skip_merge; then
             ;;
     esac
 
-    # Push to remote
-    echo "Pushing $target_branch to origin..."
-    git push origin "$target_branch"
+    # Push to remote (ADD ERROR HANDLING - CRITICAL BUG FIX)
+    echo "Pushing $target_branch to $remote_name..."
+    if ! git push "$remote_name" "$target_branch" 2>&1; then
+        echo "ERROR: Failed to push $target_branch | ACTION: Push manually with: git push $remote_name $target_branch"
+        exit 1
+    fi
 
     echo "Merge complete."
     echo ""
@@ -315,13 +369,15 @@ else
 fi
 
 # Delete remote branch
-if $remote_branch_exists && ! $keep_remote; then
-    echo "Deleting remote branch 'origin/$current_branch'..."
-    if git push origin --delete "$current_branch" 2>&1; then
+if $remote_branch_exists && ! $keep_remote && $remote_reachable; then
+    echo "Deleting remote branch '$remote_name/$current_branch'..."
+    if git push "$remote_name" --delete "$current_branch" 2>&1; then
         echo "Remote branch deleted."
     else
         echo "WARNING: Could not delete remote branch (may already be deleted)"
     fi
+elif $remote_branch_exists && ! $keep_remote && ! $remote_reachable; then
+    echo "WARNING: Cannot delete remote branch (remote not reachable)"
 fi
 
 echo ""

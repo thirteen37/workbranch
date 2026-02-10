@@ -62,6 +62,17 @@ fi
 # Verify we're in a git repository
 git_root=$(wb_require_git_root)
 
+# Check if running in sandbox
+if wb_detect_sandbox; then
+    cat <<EOF
+ERROR: Running in sandbox environment with restricted write access | ACTION: Use one of these approaches:
+  1. Run outside sandbox (turn off sandbox with /sandbox command)
+  2. Use read-only commands: wb-list, wb-status
+  3. Use dry-run mode: wb-done --dry-run, wb-nuke --dry-run
+EOF
+    exit 1
+fi
+
 cd "$git_root"
 
 # Get current branch
@@ -87,9 +98,13 @@ fi
 
 # Determine commits to move
 commits_to_move=0
-remote_branch="origin/$current_branch"
+remote_name=$(wb_get_remote)
+remote_branch=""
+if [[ -n "$remote_name" ]]; then
+    remote_branch="$remote_name/$current_branch"
+fi
 
-if git rev-parse --verify "$remote_branch" >/dev/null 2>&1; then
+if [[ -n "$remote_branch" ]] && git rev-parse --verify "$remote_branch" >/dev/null 2>&1; then
     # Count commits ahead of remote
     commits_ahead=$(git rev-list --count "$remote_branch..HEAD")
 
@@ -108,8 +123,9 @@ else
     # No remote tracking branch
     if [[ -n "$commit_count" ]]; then
         commits_to_move="$commit_count"
+    else
+        echo "WARNING: No remote branch found | ACTION: Specify --commits to move specific number of commits"
     fi
-    echo "WARNING: No remote branch '$remote_branch' found | ACTION: Push branch first or specify --commits manually"
 fi
 
 # Check if there's anything to move
@@ -127,7 +143,11 @@ if $has_untracked; then
     echo "  - Untracked files"
 fi
 if [[ "$commits_to_move" -gt 0 ]]; then
-    echo "  - $commits_to_move commit(s) ahead of $remote_branch"
+    if [[ -n "$remote_branch" ]]; then
+        echo "  - $commits_to_move commit(s) ahead of $remote_branch"
+    else
+        echo "  - $commits_to_move commit(s)"
+    fi
     git log --oneline -n "$commits_to_move" | sed 's/^/      /'
 fi
 echo ""
@@ -153,8 +173,13 @@ fi
 
 # Reset main to remote (before creating worktree so branch starts from right place)
 if [[ "$commits_to_move" -gt 0 ]]; then
-    echo "Resetting $current_branch to $remote_branch..."
-    git reset --hard "$remote_branch"
+    if [[ -n "$remote_branch" ]]; then
+        echo "Resetting $current_branch to $remote_branch..."
+        git reset --hard "$remote_branch"
+    else
+        echo "Resetting $current_branch to HEAD~$commits_to_move..."
+        git reset --hard "HEAD~$commits_to_move"
+    fi
 fi
 
 # Create worktree using wb-new
@@ -224,4 +249,8 @@ echo ""
 echo "Next steps:"
 echo "  1. Navigate to: $worktree_path"
 echo "  2. Continue development on the '$branch_name' branch"
-echo "  3. Main branch is now clean and matches $remote_branch"
+if [[ -n "$remote_branch" ]]; then
+    echo "  3. Main branch is now clean and matches $remote_branch"
+else
+    echo "  3. Main branch has been reset"
+fi

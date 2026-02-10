@@ -31,6 +31,73 @@ wb_get_default_branch() {
     echo "$branch"
 }
 
+# Get the remote name (origin, or first available, or empty string)
+wb_get_remote() {
+    local remote=""
+
+    # Try "origin" first (most common)
+    if git remote | grep -q "^origin$"; then
+        remote="origin"
+    else
+        # Use first available remote
+        remote=$(git remote | head -n 1)
+    fi
+
+    echo "$remote"
+}
+
+# Check if a remote is configured
+# Returns: 0 if remote exists, 1 otherwise
+wb_has_remote() {
+    local remote
+    remote=$(wb_get_remote)
+    [[ -n "$remote" ]]
+}
+
+# Check if remote is network-reachable (not just configured)
+# Returns: 0 if reachable, 1 otherwise (sandbox or network issue)
+wb_check_remote_reachable() {
+    local remote="$1"
+    [[ -z "$remote" ]] && return 1
+
+    # Quick connectivity check with timeout
+    if ! git ls-remote --exit-code "$remote" HEAD >/dev/null 2>&1; then
+        return 1
+    fi
+    return 0
+}
+
+# Detect if running in restricted sandbox environment
+# Returns: 0 if in sandbox, 1 otherwise
+wb_detect_sandbox() {
+    # Try to create a test directory outside current path
+    local test_dir="../.wb-sandbox-test-$$"
+    if ! mkdir -p "$test_dir" 2>/dev/null; then
+        return 0  # Sandbox detected
+    fi
+    rmdir "$test_dir" 2>/dev/null
+    return 1  # Not in sandbox
+}
+
+# Check if path is writable
+wb_check_writable() {
+    local path="$1"
+    local parent="${path:h}"
+
+    # Try to create parent directory
+    if ! mkdir -p "$parent" 2>/dev/null; then
+        return 1
+    fi
+
+    # Check if we can write to it
+    if ! touch "$parent/.wb-write-test-$$" 2>/dev/null; then
+        return 1
+    fi
+
+    rm "$parent/.wb-write-test-$$" 2>/dev/null
+    return 0
+}
+
 # Get the main (primary) worktree path
 wb_get_main_worktree() {
     git worktree list --porcelain | awk '/^worktree / { print substr($0, 10); exit }'

@@ -40,6 +40,36 @@ workbranch/
 └── .claude-plugin/plugin.json   # Plugin manifest
 ```
 
+## Working Without Remotes
+
+Workbranch supports local-only workflows when no git remote is configured:
+
+- `wb new <branch>` - Works normally, creates worktree from local branches
+- `wb list` - Shows worktrees with ahead/behind counts vs default branch
+- `wb status` - Shows current worktree status
+- `wb done --skip-merge` - Cleans up worktree without fetching/pushing
+- `wb done --local-only` - Skips all remote operations (fetch/pull/push)
+
+Remote operations are automatically skipped when no remote is detected.
+
+## Sandbox Limitations
+
+In Claude Code sandbox environments:
+
+**Working commands:**
+- `wb list` - List worktrees (read-only)
+- `wb status` - Check worktree status (read-only)
+- `wb done --dry-run` - Preview merge/cleanup actions
+- `wb nuke --dry-run` - Preview bulk cleanup
+
+**Blocked commands:**
+- `wb new` - Cannot create worktrees (write restrictions)
+- `wb rm` - Cannot remove worktrees (write restrictions)
+- `wb done` - Cannot merge/cleanup (write restrictions)
+- `wb move` - Cannot create worktrees (write restrictions)
+
+To use write commands, disable sandbox with `/sandbox` command.
+
 ## Shell Script Standards
 
 All scripts must follow these conventions for consistency.
@@ -180,6 +210,9 @@ wb rm ../test-branch --delete-branch
 - **Use worktrees for all changes**: See MANDATORY section at top of this file. Never commit directly to main.
 - Branch names can contain `/` (e.g., `feature/login`, `fix/auth-bug`) - use ZSH `${//}` substitution instead of sed
 - When writing regex patterns, ensure they are quoted and handle slashes in branch names
+- When writing scripts that interact with remotes, use `wb_get_remote()` and check `wb_has_remote()` first
+- Always check `wb_check_remote_reachable()` before network operations (handles sandbox)
+- Use $remote_name variable instead of hardcoding "origin"
 
 ## Releasing
 
