@@ -38,6 +38,17 @@ done
 # Verify we're in a git repository
 git_root=$(wb_require_git_root)
 
+# Check if running in sandbox
+if wb_detect_sandbox; then
+    cat <<EOF
+ERROR: Running in sandbox environment with restricted write access | ACTION: Use one of these approaches:
+  1. Run outside sandbox (turn off sandbox with /sandbox command)
+  2. Use read-only commands: wb-list, wb-status
+  3. Use dry-run mode: wb-done --dry-run, wb-nuke --dry-run
+EOF
+    exit 1
+fi
+
 # Normalize path (make absolute, resolve ..)
 worktree_path=$(wb_normalize_path "$worktree_path" "$(pwd)")
 
