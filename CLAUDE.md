@@ -4,10 +4,10 @@
 
 **Before making ANY code changes to this repository:**
 
-1. Run `wb status` to check current location
+1. Run `${CLAUDE_PLUGIN_ROOT}/scripts/wb status` to check current location
 2. If `LOCATION: main` and `ON_DEFAULT: true`, STOP and create a worktree first:
    ```bash
-   wb new <descriptive-branch-name>
+   ${CLAUDE_PLUGIN_ROOT}/scripts/wb new <descriptive-branch-name>
    ```
 3. Navigate to the new worktree directory
 4. Only then proceed with modifications
@@ -44,11 +44,11 @@ workbranch/
 
 Workbranch supports local-only workflows when no git remote is configured:
 
-- `wb new <branch>` - Works normally, creates worktree from local branches
-- `wb list` - Shows worktrees with ahead/behind counts vs default branch
-- `wb status` - Shows current worktree status
-- `wb done --skip-merge` - Cleans up worktree without fetching/pushing
-- `wb done --local-only` - Skips all remote operations (fetch/pull/push)
+- `${CLAUDE_PLUGIN_ROOT}/scripts/wb new <branch>` - Works normally, creates worktree from local branches
+- `${CLAUDE_PLUGIN_ROOT}/scripts/wb list` - Shows worktrees with ahead/behind counts vs default branch
+- `${CLAUDE_PLUGIN_ROOT}/scripts/wb status` - Shows current worktree status
+- `${CLAUDE_PLUGIN_ROOT}/scripts/wb done --skip-merge` - Cleans up worktree without fetching/pushing
+- `${CLAUDE_PLUGIN_ROOT}/scripts/wb done --local-only` - Skips all remote operations (fetch/pull/push)
 
 Remote operations are automatically skipped when no remote is detected.
 
@@ -57,18 +57,45 @@ Remote operations are automatically skipped when no remote is detected.
 In Claude Code sandbox environments:
 
 **Working commands:**
-- `wb list` - List worktrees (read-only)
-- `wb status` - Check worktree status (read-only)
-- `wb done --dry-run` - Preview merge/cleanup actions
-- `wb nuke --dry-run` - Preview bulk cleanup
+- `${CLAUDE_PLUGIN_ROOT}/scripts/wb list` - List worktrees (read-only)
+- `${CLAUDE_PLUGIN_ROOT}/scripts/wb status` - Check worktree status (read-only)
+- `${CLAUDE_PLUGIN_ROOT}/scripts/wb done --dry-run` - Preview merge/cleanup actions
+- `${CLAUDE_PLUGIN_ROOT}/scripts/wb nuke --dry-run` - Preview bulk cleanup
 
 **Blocked commands:**
-- `wb new` - Cannot create worktrees (write restrictions)
-- `wb rm` - Cannot remove worktrees (write restrictions)
-- `wb done` - Cannot merge/cleanup (write restrictions)
-- `wb move` - Cannot create worktrees (write restrictions)
+- `${CLAUDE_PLUGIN_ROOT}/scripts/wb new` - Cannot create worktrees (write restrictions)
+- `${CLAUDE_PLUGIN_ROOT}/scripts/wb rm` - Cannot remove worktrees (write restrictions)
+- `${CLAUDE_PLUGIN_ROOT}/scripts/wb done` - Cannot merge/cleanup (write restrictions)
+- `${CLAUDE_PLUGIN_ROOT}/scripts/wb move` - Cannot create worktrees (write restrictions)
 
 To use write commands, disable sandbox with `/sandbox` command.
+
+## Script Invocation
+
+### Within Claude Code (Normal Usage)
+
+When Claude uses the workbranch skill, it invokes scripts via `${CLAUDE_PLUGIN_ROOT}`:
+
+```bash
+${CLAUDE_PLUGIN_ROOT}/scripts/wb new feature-x
+```
+
+This variable is set by Claude Code and points to the installed plugin directory.
+
+### Direct Script Access (Development Only)
+
+When developing the plugin, run scripts directly from the repository:
+
+```bash
+# From main worktree
+./scripts/wb-test
+./scripts/wb-list
+
+# From feature worktree
+../workbranch/scripts/wb new another-feature
+```
+
+**Never** instruct Claude to run bare `wb` commands without `${CLAUDE_PLUGIN_ROOT}` prefix, as this will fail with "command not found" errors.
 
 ## Shell Script Standards
 
@@ -191,19 +218,20 @@ Run the integration test suite:
 ./scripts/wb-test --verbose # Show detailed output
 ```
 
-Or run scripts manually using the `wb` dispatcher or directly:
+When developing the plugin, run scripts directly from the repository:
 
 ```bash
-# Using dispatcher
-wb list
-wb new test-branch
-wb move feature-name
-wb rm ../test-branch --delete-branch
-
-# Or directly
+# Direct invocation for development
 ./scripts/wb-list
 ./scripts/wb-new test-branch
+./scripts/wb-rm ../test-branch --delete-branch
+
+# Or using the dispatcher
+./scripts/wb list
+./scripts/wb new test-branch
 ```
+
+**Note:** These examples are for plugin development only. When Claude uses the plugin, it invokes scripts via `${CLAUDE_PLUGIN_ROOT}/scripts/wb`.
 
 ## Development Guidelines
 

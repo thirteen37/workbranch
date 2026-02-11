@@ -68,15 +68,21 @@ Clean up merged worktrees. Use `--wip` flag to also remove unmerged worktrees (d
 /workbranch:nuke --wip    # Also remove WIP worktrees (DANGEROUS)
 ```
 
-## Shell Scripts
+## For Developers
 
-The plugin includes shell scripts that can be used standalone:
+When developing the workbranch plugin itself, you can run scripts directly:
 
-- `wb-new <branch> [source]` - Create worktree with config file copying
-- `wb-list` - List worktrees with status
-- `wb-status [options]` - Check current worktree/branch status
-- `wb-rm <path> [--delete-branch]` - Remove worktree
-- `wb-nuke [--wip]` - Clean up merged (and optionally WIP) worktrees
+```bash
+# From repository root
+./scripts/wb list
+./scripts/wb new test-branch
+
+# From worktree
+cd ../test-worktree
+../workbranch/scripts/wb status
+```
+
+**This is only for plugin development.** End users should interact with the plugin through Claude Code.
 
 ## Hooks
 
@@ -94,9 +100,10 @@ This ensures the worktree workflow is followed while allowing override when need
 
 When you ask Claude to work on a feature or fix a bug:
 
-1. Claude automatically uses `wb-new` to create an isolated worktree
-2. Development proceeds in the worktree directory
-3. After PR merge, use `/workbranch:nuke` to clean up
+1. Claude uses the workbranch skill to determine the workflow
+2. Claude invokes `${CLAUDE_PLUGIN_ROOT}/scripts/wb` commands on your behalf
+3. Development proceeds in the isolated worktree directory
+4. After PR merge, use `/workbranch:nuke` command to clean up
 
 The worktree approach keeps your main working directory clean and allows parallel development on multiple features.
 
