@@ -44,10 +44,10 @@ When adding instructions to CLAUDE.md, add TWO sections:
 
 **Before making ANY code changes to this repository:**
 
-1. Run `git branch --show-current` to check current branch
-2. If on `main` or `master`, STOP and create a worktree first:
+1. Run `${CLAUDE_PLUGIN_ROOT}/scripts/wb status` to check current location
+2. If `LOCATION: main` and `ON_DEFAULT: true`, STOP and create a worktree first:
    ```bash
-   wb new <descriptive-branch-name>
+   ${CLAUDE_PLUGIN_ROOT}/scripts/wb new <descriptive-branch-name>
    ```
 3. Navigate to the new worktree directory
 4. Only then proceed with modifications
@@ -71,18 +71,18 @@ This project enforces worktree-based development using the workbranch plugin. **
 
 ### Workflow
 
-1. **Before any code change**: Create a worktree with `wb new <branch-name>`
+1. **Before any code change**: Create a worktree with `${CLAUDE_PLUGIN_ROOT}/scripts/wb new <branch-name>`
 2. **During development**: Work entirely within the worktree directory
-3. **After completion**: Use `wb done <branch>` from main to merge and clean up
+3. **After completion**: Use `${CLAUDE_PLUGIN_ROOT}/scripts/wb done <branch>` from main to merge and clean up
 
 ### Quick Reference
 
 | Task | Command |
 |------|---------|
-| Create worktree | `wb new <branch>` |
-| List worktrees | `wb list` |
-| Finish work | `wb done <branch>` (from main) |
-| Rescue changes from main | `wb move <branch>` |
+| Create worktree | `${CLAUDE_PLUGIN_ROOT}/scripts/wb new <branch>` |
+| List worktrees | `${CLAUDE_PLUGIN_ROOT}/scripts/wb list` |
+| Finish work | `${CLAUDE_PLUGIN_ROOT}/scripts/wb done <branch>` (from main) |
+| Rescue changes from main | `${CLAUDE_PLUGIN_ROOT}/scripts/wb move <branch>` |
 
 Use the workbranch skill for detailed guidance on the worktree workflow.
 ```

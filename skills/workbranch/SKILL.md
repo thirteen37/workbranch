@@ -12,9 +12,9 @@ Git worktrees enable isolated development by creating separate working directori
 
 **Core principle**: Never use `git checkout` or `git switch` for feature/bugfix work. Always create a worktree instead.
 
-## Script Invocation (IMPORTANT)
+## CRITICAL: Script Invocation
 
-**All wb commands MUST be invoked using `${CLAUDE_PLUGIN_ROOT}`:**
+**EVERY SINGLE workbranch command MUST be invoked with the FULL path:**
 
 ```bash
 ${CLAUDE_PLUGIN_ROOT}/scripts/wb new feature-x
@@ -22,11 +22,15 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/wb list
 ${CLAUDE_PLUGIN_ROOT}/scripts/wb status
 ```
 
-**Do NOT run bare `wb` commands** - the `${CLAUDE_PLUGIN_ROOT}` variable is only available within Claude Code and ensures the correct plugin version is used.
+**NEVER EVER run bare `wb` commands** - they will fail with "command not found". The `${CLAUDE_PLUGIN_ROOT}` prefix is MANDATORY and non-negotiable.
 
-**Examples:**
-- ✅ Correct: `${CLAUDE_PLUGIN_ROOT}/scripts/wb new my-feature`
-- ❌ Wrong: `wb new my-feature`
+**When you see `wb new`, `wb list`, `wb done`, etc. in this document, you MUST execute them as:**
+- ✅ `${CLAUDE_PLUGIN_ROOT}/scripts/wb new <branch>`
+- ✅ `${CLAUDE_PLUGIN_ROOT}/scripts/wb list`
+- ✅ `${CLAUDE_PLUGIN_ROOT}/scripts/wb done <branch>`
+- ❌ NEVER: `wb new <branch>`
+- ❌ NEVER: `wb list`
+- ❌ NEVER: `wb done <branch>`
 
 ## When to Use Worktrees
 
@@ -42,15 +46,19 @@ The only exceptions:
 
 ## Commands
 
-The workbranch plugin provides a unified `wb` command with subcommands:
+The workbranch plugin provides scripts that MUST be invoked via `${CLAUDE_PLUGIN_ROOT}/scripts/wb`:
 
-### wb new - Create Worktree
+**REMINDER: Every command below REQUIRES the `${CLAUDE_PLUGIN_ROOT}/scripts/` prefix!**
+
+### Create Worktree: `${CLAUDE_PLUGIN_ROOT}/scripts/wb new`
 
 Create a new worktree for a branch:
 
 ```bash
 ${CLAUDE_PLUGIN_ROOT}/scripts/wb new <branch-name> [source-branch]
 ```
+
+**IMPORTANT:** You MUST use the full path `${CLAUDE_PLUGIN_ROOT}/scripts/wb new` - do NOT run `wb new`.
 
 - If branch exists, checks it out in a new worktree
 - If branch doesn't exist, creates it from source-branch (default: current HEAD)
@@ -66,13 +74,15 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/wb new feature-user-auth
 ${CLAUDE_PLUGIN_ROOT}/scripts/wb new hotfix-login-bug main
 ```
 
-### wb list - List Worktrees
+### List Worktrees: `${CLAUDE_PLUGIN_ROOT}/scripts/wb list`
 
 Show all worktrees with their status:
 
 ```bash
 ${CLAUDE_PLUGIN_ROOT}/scripts/wb list
 ```
+
+**IMPORTANT:** You MUST use the full path `${CLAUDE_PLUGIN_ROOT}/scripts/wb list` - do NOT run `wb list`.
 
 Output includes:
 - Worktree path
@@ -81,13 +91,15 @@ Output includes:
 
 Run this to check existing worktrees before creating new ones.
 
-### wb status - Pre-flight Check
+### Pre-flight Check: `${CLAUDE_PLUGIN_ROOT}/scripts/wb status`
 
 Check current location before making changes:
 
 ```bash
 ${CLAUDE_PLUGIN_ROOT}/scripts/wb status
 ```
+
+**IMPORTANT:** You MUST use the full path `${CLAUDE_PLUGIN_ROOT}/scripts/wb status` - do NOT run `wb status`.
 
 **Output fields**:
 - LOCATION: `main` or `worktree`
@@ -109,7 +121,7 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/wb status
 # If LOCATION: main and ON_DEFAULT: true, run 'wb new <branch>' first
 ```
 
-### wb rm - Remove Worktree
+### Remove Worktree: `${CLAUDE_PLUGIN_ROOT}/scripts/wb rm`
 
 Remove a worktree when done:
 
@@ -117,17 +129,21 @@ Remove a worktree when done:
 ${CLAUDE_PLUGIN_ROOT}/scripts/wb rm <worktree-path> [--delete-branch]
 ```
 
+**IMPORTANT:** You MUST use the full path `${CLAUDE_PLUGIN_ROOT}/scripts/wb rm` - do NOT run `wb rm`.
+
 - Removes the worktree directory
 - With `--delete-branch`: also deletes the branch (only if merged)
 - Fails if worktree has uncommitted changes
 
-### wb move - Rescue Changes from Main
+### Rescue Changes from Main: `${CLAUDE_PLUGIN_ROOT}/scripts/wb move`
 
 Move uncommitted changes and/or local commits from main to a new worktree:
 
 ```bash
 ${CLAUDE_PLUGIN_ROOT}/scripts/wb move <branch-name> [--commits N]
 ```
+
+**IMPORTANT:** You MUST use the full path `${CLAUDE_PLUGIN_ROOT}/scripts/wb move` - do NOT run `wb move`.
 
 - Detects uncommitted changes and commits ahead of origin/main
 - Stashes uncommitted work, resets main to match remote
@@ -143,13 +159,15 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/wb move feature-login
 ${CLAUDE_PLUGIN_ROOT}/scripts/wb move hotfix-auth --commits 2
 ```
 
-### wb done - Merge and Cleanup
+### Merge and Cleanup: `${CLAUDE_PLUGIN_ROOT}/scripts/wb done`
 
 Finish work on a branch by merging to main and cleaning up:
 
 ```bash
 ${CLAUDE_PLUGIN_ROOT}/scripts/wb done [branch-name] [options]
 ```
+
+**IMPORTANT:** You MUST use the full path `${CLAUDE_PLUGIN_ROOT}/scripts/wb done` - do NOT run `wb done`.
 
 **Modes**:
 - `${CLAUDE_PLUGIN_ROOT}/scripts/wb done <branch>` — Run from **main worktree**, specify branch to merge (recommended)
@@ -190,7 +208,7 @@ cd /path/to/main  # IMPORTANT: Navigate away immediately!
 
 **EXECUTE Output for Claude**
 
-When running `wb done` from a feature worktree, the script outputs an `EXECUTE:` line at the end:
+When running `${CLAUDE_PLUGIN_ROOT}/scripts/wb done` from a feature worktree, the script outputs an `EXECUTE:` line at the end:
 
 ```
 EXECUTE: cd /path/to/main/worktree
@@ -217,7 +235,7 @@ EXECUTE: cd /path/to/main/worktree
 
 ### Finishing Work
 
-Use the `wb done` command to complete work on a branch. The **recommended approach** is to run from the main worktree with the branch name:
+Use `${CLAUDE_PLUGIN_ROOT}/scripts/wb done` to complete work on a branch. The **recommended approach** is to run from the main worktree with the branch name:
 
 ```bash
 # From main worktree (recommended)
@@ -248,7 +266,7 @@ The `--skip-merge` flag skips the merge phase (since it's already merged via PR)
 
 #### Legacy: Running from Feature Worktree
 
-You can still run the `wb done` command from within a feature worktree (without a branch argument). In this case, you **must** navigate away immediately after completion:
+You can still run `${CLAUDE_PLUGIN_ROOT}/scripts/wb done` from within a feature worktree (without a branch argument). In this case, you **must** navigate away immediately after completion:
 
 ```bash
 # From feature worktree
@@ -344,8 +362,8 @@ Once in a worktree:
 ### Clean Up After Merge
 
 After work is merged (via PR or direct merge):
-- Use the `wb done` command for automatic cleanup (preferred)
-- Or use the `wb rm` command for manual cleanup
+- Use `${CLAUDE_PLUGIN_ROOT}/scripts/wb done` for automatic cleanup (preferred)
+- Or use `${CLAUDE_PLUGIN_ROOT}/scripts/wb rm` for manual cleanup
 - The `--delete-branch` flag safely deletes only merged branches
 
 ### Recovering from Mistakes on Main
@@ -384,16 +402,23 @@ All scripts are in `${CLAUDE_PLUGIN_ROOT}/scripts/`:
 
 ### "command not found: wb"
 
-**Cause:** Attempting to run `wb` commands without `${CLAUDE_PLUGIN_ROOT}` prefix, or running in regular shell instead of through Claude Code.
+**Cause:** Attempting to run `wb` commands without `${CLAUDE_PLUGIN_ROOT}` prefix. This is the MOST COMMON ERROR with this skill.
 
-**Solution:** Always use the full path:
+**Solution:** ALWAYS use the FULL path - there are NO exceptions:
 ```bash
 ${CLAUDE_PLUGIN_ROOT}/scripts/wb <command>
 ```
 
-The `${CLAUDE_PLUGIN_ROOT}` variable is only available within Claude Code. If you see this error, it means:
-1. Claude is trying to run bare `wb` commands (should use `${CLAUDE_PLUGIN_ROOT}/scripts/wb`)
-2. User is trying to run commands in regular shell (should use Claude Code instead)
+**If you (Claude) see this error in a Bash tool result:**
+1. You forgot to use the `${CLAUDE_PLUGIN_ROOT}/scripts/` prefix
+2. IMMEDIATELY retry with the correct full path
+3. Do NOT try alternatives - just add the prefix
+
+**Examples of fixing this error:**
+- ❌ You ran: `wb new feature-x`
+- ✅ Retry with: `${CLAUDE_PLUGIN_ROOT}/scripts/wb new feature-x`
+
+The `${CLAUDE_PLUGIN_ROOT}` variable is only available within Claude Code and is MANDATORY for all workbranch commands.
 
 ### Plugin Development
 
