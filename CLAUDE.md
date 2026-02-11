@@ -209,6 +209,36 @@ WB_CONFIG[path]='../$NAME'
 
 Note: ZSH regex patterns must be quoted in `[[ ]]` conditionals.
 
+### Sandbox-Safe Scripting
+
+**CRITICAL: Avoid heredocs** - they create temp files that fail in sandbox mode:
+
+```zsh
+# BAD - heredoc fails in sandbox
+cat <<EOF
+ERROR: message
+  details here
+EOF
+
+# GOOD - use echo/printf instead
+echo "ERROR: message"
+echo "  details here"
+```
+
+**Reserved ZSH Parameters** - avoid these variable names:
+- `commands` - autoloaded associative array, causes "can't change type" error
+- Use alternative names: `cmd_list`, `post_create_cmds`, etc.
+
+```zsh
+# BAD - conflicts with ZSH builtin
+local -a commands
+commands=("$@")
+
+# GOOD - use different name
+local -a cmd_list
+cmd_list=("$@")
+```
+
 ## Testing Scripts
 
 Run the integration test suite:

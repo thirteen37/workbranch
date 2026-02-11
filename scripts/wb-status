@@ -106,17 +106,15 @@ fi
 
 # Output results
 if [[ "$output_format" == "json" ]]; then
-    cat <<EOF
-{
-  "location": "$location",
-  "branch": "$current_branch",
-  "default_branch": "$default_branch",
-  "on_default": $on_default,
-  "worktree_path": "$current_worktree",
-  "main_worktree": "$main_worktree",
-  "dirty": $dirty
-}
-EOF
+    echo "{"
+    echo "  \"location\": \"$location\","
+    echo "  \"branch\": \"$current_branch\","
+    echo "  \"default_branch\": \"$default_branch\","
+    echo "  \"on_default\": $on_default,"
+    echo "  \"worktree_path\": \"$current_worktree\","
+    echo "  \"main_worktree\": \"$main_worktree\","
+    echo "  \"dirty\": $dirty"
+    echo "}"
 else
     echo "LOCATION: $location"
     echo "BRANCH: $current_branch"
