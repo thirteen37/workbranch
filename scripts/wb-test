@@ -407,6 +407,146 @@ test_no_remote() {
     cd "$REPO_DIR"
 }
 
+# Verbosity control tests
+test_wb_parse_output_flags() {
+    source "$SCRIPT_DIR/wb-lib"
+
+    # Test default (no flags)
+    wb_parse_output_flags "arg1" "arg2"
+    if [[ "$WB_VERBOSE" -eq 0 && "$WB_OUTPUT_FORMAT" == "text" && "${#WB_REMAINING_ARGS[@]}" -eq 2 ]]; then
+        pass "wb_parse_output_flags: default values"
+    else
+        fail "wb_parse_output_flags: default values" "VERBOSE=$WB_VERBOSE FORMAT=$WB_OUTPUT_FORMAT REMAINING=${WB_REMAINING_ARGS[@]}"
+    fi
+
+    # Test --verbose
+    wb_parse_output_flags "--verbose" "arg1"
+    if [[ "$WB_VERBOSE" -eq 1 && "${#WB_REMAINING_ARGS[@]}" -eq 1 ]]; then
+        pass "wb_parse_output_flags: --verbose flag"
+    else
+        fail "wb_parse_output_flags: --verbose flag" "VERBOSE=$WB_VERBOSE REMAINING=${WB_REMAINING_ARGS[@]}"
+    fi
+
+    # Test --json
+    wb_parse_output_flags "--json" "arg1"
+    if [[ "$WB_OUTPUT_FORMAT" == "json" && "${#WB_REMAINING_ARGS[@]}" -eq 1 ]]; then
+        pass "wb_parse_output_flags: --json flag"
+    else
+        fail "wb_parse_output_flags: --json flag" "FORMAT=$WB_OUTPUT_FORMAT REMAINING=${WB_REMAINING_ARGS[@]}"
+    fi
+}
+
+test_wb_log_functions() {
+    source "$SCRIPT_DIR/wb-lib"
+
+    # Test wb_log_milestone in text mode
+    WB_OUTPUT_FORMAT="text"
+    local output
+    output=$(wb_log_milestone "Test milestone")
+    if [[ "$output" == "Test milestone" ]]; then
+        pass "wb_log_milestone: text mode"
+    else
+        fail "wb_log_milestone: text mode" "Output: $output"
+    fi
+
+    # Test wb_log_milestone in JSON mode (should be silent)
+    WB_OUTPUT_FORMAT="json"
+    output=$(wb_log_milestone "Test milestone")
+    if [[ -z "$output" ]]; then
+        pass "wb_log_milestone: JSON mode silent"
+    else
+        fail "wb_log_milestone: JSON mode silent" "Output: $output"
+    fi
+
+    # Test wb_log_progress in verbose mode
+    WB_VERBOSE=1
+    WB_OUTPUT_FORMAT="text"
+    output=$(wb_log_progress "Test progress")
+    if [[ "$output" == "Test progress" ]]; then
+        pass "wb_log_progress: verbose mode"
+    else
+        fail "wb_log_progress: verbose mode" "Output: $output"
+    fi
+
+    # Test wb_log_progress in quiet mode (should be silent)
+    WB_VERBOSE=0
+    output=$(wb_log_progress "Test progress")
+    if [[ -z "$output" ]]; then
+        pass "wb_log_progress: quiet mode silent"
+    else
+        fail "wb_log_progress: quiet mode silent" "Output: $output"
+    fi
+}
+
+test_wb_output_functions() {
+    source "$SCRIPT_DIR/wb-lib"
+
+    # Test text mode
+    WB_OUTPUT_FORMAT="text"
+    local output
+    output=$(wb_output_start; wb_output_field "key1" "value1"; wb_output_field "key2" "value2"; wb_output_end)
+    if echo "$output" | grep -q "key1: value1" && echo "$output" | grep -q "key2: value2"; then
+        pass "wb_output functions: text mode"
+    else
+        fail "wb_output functions: text mode" "Output: $output"
+    fi
+
+    # Test JSON mode
+    WB_OUTPUT_FORMAT="json"
+    output=$(wb_output_start; wb_output_field "key1" "value1"; wb_output_field "key2" "value2"; wb_output_end)
+    if echo "$output" | grep -q '"key1": "value1"' && echo "$output" | grep -q '"key2": "value2"'; then
+        pass "wb_output functions: JSON mode"
+    else
+        fail "wb_output functions: JSON mode" "Output: $output"
+    fi
+}
+
+test_wb_list_json_output() {
+    local output
+    output=$("$SCRIPT_DIR/wb-list" --json 2>&1) || true
+
+    # Check if output is valid JSON and contains expected fields
+    if echo "$output" | grep -q '"worktrees"' && echo "$output" | grep -q '"count"'; then
+        pass "wb-list --json: produces valid JSON"
+    else
+        fail "wb-list --json: produces valid JSON" "Output: $output"
+    fi
+}
+
+test_wb_status_json_output() {
+    local output
+    output=$("$SCRIPT_DIR/wb-status" --json 2>&1) || true
+
+    # Check if output is valid JSON and contains expected fields
+    if echo "$output" | grep -q '"location"' && echo "$output" | grep -q '"branch"'; then
+        pass "wb-status --json: produces valid JSON"
+    else
+        fail "wb-status --json: produces valid JSON" "Output: $output"
+    fi
+}
+
+test_wb_new_verbose_output() {
+    local output line_count
+
+    # Test without --verbose (should be minimal)
+    output=$("$SCRIPT_DIR/wb-new" test-verbose-check 2>&1) || true
+    line_count=$(echo "$output" | wc -l)
+    if [[ $line_count -lt 10 ]]; then
+        pass "wb-new: default output is minimal"
+    else
+        fail "wb-new: default output is minimal" "Output has $line_count lines"
+    fi
+
+    # Cleanup
+    cd "$REPO_DIR"
+    local worktree_path
+    worktree_path=$(git worktree list --porcelain | grep "worktree.*test-verbose-check" | sed 's/^worktree //')
+    if [[ -n "$worktree_path" ]]; then
+        git worktree remove --force "$worktree_path" 2>/dev/null || true
+        git branch -D test-verbose-check 2>/dev/null || true
+    fi
+}
+
 # =============================================================================
 # Main
 # =============================================================================
@@ -430,6 +570,14 @@ test_wb_parse_config_reads_file
 test_wb_parse_config_handles_quotes
 test_wb_done_discard_changes
 test_no_remote
+
+# Verbosity control tests
+test_wb_parse_output_flags
+test_wb_log_functions
+test_wb_output_functions
+test_wb_list_json_output
+test_wb_status_json_output
+test_wb_new_verbose_output
 
 # Summary
 echo ""
