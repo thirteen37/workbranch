@@ -226,7 +226,10 @@ wb_parse_output_flags() {
 # Usage: wb_log_milestone "Creating worktree"
 wb_log_milestone() {
     local message="$1"
-    [[ "$WB_OUTPUT_FORMAT" != "json" ]] && echo "$message"
+    if [[ "$WB_OUTPUT_FORMAT" != "json" ]]; then
+        echo "$message"
+    fi
+    return 0
 }
 
 # Log a progress step (verbose mode only)
@@ -236,6 +239,7 @@ wb_log_progress() {
     if [[ "${WB_VERBOSE:-0}" -eq 1 && "$WB_OUTPUT_FORMAT" != "json" ]]; then
         echo "$message"
     fi
+    return 0
 }
 
 # Run git command with output control
