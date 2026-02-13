@@ -32,6 +32,49 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/wb status
 - ❌ NEVER: `wb list`
 - ❌ NEVER: `wb done <branch>`
 
+## Output Control Flags
+
+All workbranch commands support these flags to control output verbosity:
+
+### `--verbose`
+Show detailed output including git commands and progress steps. Use when:
+- Debugging issues or understanding what went wrong
+- Learning how the commands work
+- Investigating git operations
+
+Default behavior suppresses detailed output to reduce token usage by 60-80%.
+
+### `--json`
+Output structured JSON instead of text. Use when:
+- Need machine-readable output
+- Integrating with other tools
+- Parsing results programmatically
+
+### Examples
+
+```bash
+# Default: minimal output
+${CLAUDE_PLUGIN_ROOT}/scripts/wb new feature-x
+
+# Verbose: see all git commands and progress
+${CLAUDE_PLUGIN_ROOT}/scripts/wb new feature-x --verbose
+
+# JSON: structured output
+${CLAUDE_PLUGIN_ROOT}/scripts/wb list --json
+
+# Combine with other flags
+${CLAUDE_PLUGIN_ROOT}/scripts/wb done --skip-merge --verbose
+```
+
+**When Claude should use verbose mode:**
+- When a command fails and more context is needed
+- When asked to explain what the command does
+- When troubleshooting or investigating issues
+
+**When Claude should NOT use verbose mode:**
+- Normal operations (creates unnecessary token consumption)
+- When user hasn't explicitly requested details
+
 ## When to Use Worktrees
 
 Create a worktree for:
@@ -80,6 +123,9 @@ Show all worktrees with their status:
 
 ```bash
 ${CLAUDE_PLUGIN_ROOT}/scripts/wb list
+
+# JSON output for programmatic use
+${CLAUDE_PLUGIN_ROOT}/scripts/wb list --json
 ```
 
 **IMPORTANT:** You MUST use the full path `${CLAUDE_PLUGIN_ROOT}/scripts/wb list` - do NOT run `wb list`.
@@ -111,7 +157,8 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/wb status
 - DIRTY: Whether uncommitted changes exist
 
 **Options**:
-- `--json`: JSON output
+- `--verbose`: Show detailed output
+- `--json`: JSON output for programmatic use
 - `--check-main`: Exit 0 if on main, 1 otherwise
 - `--check-worktree`: Exit 0 if in worktree, 1 otherwise
 
