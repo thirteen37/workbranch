@@ -70,6 +70,70 @@ In Claude Code sandbox environments:
 
 To use write commands, disable sandbox with `/sandbox` command.
 
+## Output Control
+
+All workbranch scripts support verbosity control flags to reduce token usage while maintaining debugging capability:
+
+### Flags
+
+- **`--verbose`**: Show detailed output including git commands and progress steps
+- **`--json`**: Output structured JSON instead of text (for programmatic use)
+
+### Default Behavior
+
+By default, scripts produce minimal output:
+- Major milestones are shown (e.g., "Creating worktree", "Merging branch")
+- Detailed sub-steps are hidden (shown with `--verbose`)
+- Git command output is suppressed (shown with `--verbose`)
+- Final results use structured key-value format
+
+This reduces token consumption by 60-80% in typical Claude Code sessions.
+
+### Usage Examples
+
+```bash
+# Minimal output (default)
+${CLAUDE_PLUGIN_ROOT}/scripts/wb new feature-x
+
+# Detailed output for debugging
+${CLAUDE_PLUGIN_ROOT}/scripts/wb new feature-x --verbose
+
+# JSON output for programmatic use
+${CLAUDE_PLUGIN_ROOT}/scripts/wb list --json
+
+# Combine flags where supported
+${CLAUDE_PLUGIN_ROOT}/scripts/wb done --skip-merge --verbose
+```
+
+### Which Scripts Support These Flags
+
+All scripts support `--verbose` and `--json`:
+- `wb status` - Already had `--json`, now also supports `--verbose`
+- `wb list` - List worktrees with optional JSON output
+- `wb new` - Create worktree with progress tracking
+- `wb rm` - Remove worktree with status reporting
+- `wb move` - Move changes with multi-phase tracking
+- `wb done` - Merge and cleanup with detailed progress
+- `wb nuke` - Bulk cleanup with summary reporting
+
+### When to Use Verbose Mode
+
+Use `--verbose` when:
+- Debugging script behavior or git operations
+- Understanding why a command failed
+- Learning how the scripts work
+- Troubleshooting merge conflicts or branch issues
+
+### When to Use JSON Mode
+
+Use `--json` when:
+- Integrating with other tools or scripts
+- Building automation on top of workbranch
+- Need machine-readable output
+- Parsing results programmatically
+
+**Note**: Error messages always include `| ACTION:` guidance regardless of verbosity mode.
+
 ## Script Invocation
 
 ### Within Claude Code (Normal Usage)
