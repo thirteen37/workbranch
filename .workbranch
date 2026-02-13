@@ -1,2 +1,0 @@
-path=.worktrees/$NAME
-copy=.workbranch:.envrc
