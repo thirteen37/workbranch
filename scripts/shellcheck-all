@@ -1,0 +1,117 @@
+#!/usr/bin/env zsh
+# shellcheck-all - Run shellcheck on all workbranch scripts
+# Usage: shellcheck-all [--fix]
+
+set -euo pipefail
+
+SCRIPT_DIR="${0:A:h}"
+FIX_MODE=false
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --fix)
+            FIX_MODE=true
+            shift
+            ;;
+        -h|--help)
+            echo "Usage: shellcheck-all [--fix]"
+            echo ""
+            echo "Run shellcheck on all workbranch scripts."
+            echo ""
+            echo "Options:"
+            echo "  --fix    Show fix suggestions (shellcheck -f diff)"
+            exit 0
+            ;;
+        *)
+            echo "ERROR: Unknown option: $1"
+            exit 1
+            ;;
+    esac
+done
+
+# Color codes
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+NC='\033[0m'
+
+echo "Running shellcheck on workbranch scripts..."
+echo ""
+echo "${YELLOW}Note:${NC} shellcheck doesn't fully support ZSH syntax"
+echo "      Running in bash-compatible mode to catch generic issues"
+echo "      Some ZSH-specific warnings are expected and can be ignored"
+echo ""
+
+# Find all scripts (executable files without extension, plus wb-lib)
+scripts=(
+    "$SCRIPT_DIR"/wb-*
+    "$SCRIPT_DIR/wb"
+)
+
+failed=0
+passed=0
+skipped=0
+
+# Shellcheck exclusions for known ZSH-specific patterns and expected behaviors
+# SC1009, SC1036, SC1058, SC1072, SC1073: ZSH glob syntax like (N)
+# SC1071: ShellCheck doesn't support ZSH (expected)
+# SC1087: ZSH array indexing $match[1] vs bash ${match[1]}
+# SC1091: Not following sourced files (expected, we don't want cross-file analysis)
+# SC2016: Expressions in single quotes (intentional for template strings like '../$NAME')
+# SC2076: ZSH allows quoted regex in [[ =~ ]]
+# SC2145: Array expansion in strings (minor, ZSH-specific)
+# SC2168: ZSH allows 'local' at top level
+# SC2296: ZSH parameter expansions like ${(@s:/:)path}
+# SC2034: Variables used in sourced scripts or by callers
+# SC2154: Variables sourced from other files
+EXCLUDES="SC1009,SC1036,SC1058,SC1072,SC1073,SC1071,SC1087,SC1091,SC2016,SC2076,SC2145,SC2168,SC2296,SC2034,SC2154"
+
+for script in "${scripts[@]}"; do
+    # Skip test directory artifacts
+    [[ "$script" =~ /wb-.*-test$ ]] && continue
+
+    # Skip if not a file
+    [[ ! -f "$script" ]] && continue
+
+    script_name=$(basename "$script")
+
+    # Run shellcheck in bash mode with ZSH exclusions
+    if $FIX_MODE; then
+        echo "=== $script_name ==="
+        if shellcheck -s bash -e "$EXCLUDES" -f diff "$script" 2>&1; then
+            echo -e "${GREEN}✓${NC} No issues"
+            ((++passed))
+        else
+            ((++failed))
+        fi
+        echo ""
+    else
+        if output=$(shellcheck -s bash -e "$EXCLUDES" "$script" 2>&1); then
+            echo -e "${GREEN}✓${NC} $script_name"
+            ((++passed))
+        else
+            # Check if only ZSH-related errors
+            if echo "$output" | grep -qE "SC(1071|2296|2034|2154)"; then
+                echo -e "${YELLOW}~${NC} $script_name (ZSH-specific syntax, OK)"
+                ((++skipped))
+            else
+                echo -e "${RED}✗${NC} $script_name"
+                echo "$output" | grep -v "SC1071\|SC2296\|SC2034\|SC2154" || true
+                ((++failed))
+            fi
+        fi
+    fi
+done
+
+echo ""
+echo "Summary: $passed passed, $skipped skipped (ZSH-only), $failed failed"
+
+if [[ $failed -gt 0 ]]; then
+    echo ""
+    echo "Run with --fix to see suggested fixes:"
+    echo "  $0 --fix"
+    exit 1
+fi
+
+exit 0

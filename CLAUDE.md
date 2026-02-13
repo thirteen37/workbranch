@@ -327,6 +327,38 @@ When developing the plugin, run scripts directly from the repository:
 
 **Note:** These examples are for plugin development only. When Claude uses the plugin, it invokes scripts via `${CLAUDE_PLUGIN_ROOT}/scripts/wb`.
 
+## Code Quality
+
+### Shellcheck
+
+All scripts are checked with shellcheck to catch common shell scripting issues. While shellcheck doesn't fully support ZSH syntax, it can still catch many generic bugs.
+
+**Run shellcheck locally:**
+```bash
+./scripts/shellcheck-all           # Check all scripts
+./scripts/shellcheck-all --fix     # Show fix suggestions
+```
+
+**Install git hooks:**
+```bash
+./scripts/install-hooks
+```
+
+This sets up a pre-commit hook that automatically runs shellcheck on modified scripts before each commit.
+
+**CI Integration:**
+- Shellcheck runs automatically on all PRs via GitHub Actions
+- See `.github/workflows/shellcheck.yml`
+
+**Note:** Many shellcheck warnings are excluded for ZSH-specific syntax:
+- ZSH array indexing (`$match[1]`)
+- ZSH parameter expansions (`${(@s:/:)path}`)
+- ZSH glob qualifiers (`(N)`)
+- Top-level `local` declarations
+- Quoted regex patterns in `[[ =~ ]]`
+
+The test suite (`wb-test`) remains the primary quality check for functionality.
+
 ## Development Guidelines
 
 - **Use worktrees for all changes**: See MANDATORY section at top of this file. Never commit directly to main.
