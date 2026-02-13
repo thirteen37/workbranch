@@ -1,0 +1,23 @@
+#!/usr/bin/env zsh
+# install-hooks - Install git hooks for workbranch development
+# Usage: scripts/install-hooks
+
+set -euo pipefail
+
+SCRIPT_DIR="${0:A:h}"
+GIT_ROOT="${SCRIPT_DIR:h}"
+
+echo "Installing git hooks..."
+
+# Configure git to use .githooks directory
+git config core.hooksPath .githooks
+
+# Make all hooks executable
+chmod +x .githooks/* 2>/dev/null || true
+
+echo "✓ Git hooks installed successfully"
+echo ""
+echo "Hooks will now run automatically on:"
+echo "  - pre-commit: shellcheck on modified scripts"
+echo ""
+echo "To bypass hooks temporarily, use: git commit --no-verify"

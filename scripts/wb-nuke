@@ -10,17 +10,23 @@ SCRIPT_DIR="${0:A:h}"
 source "$SCRIPT_DIR/wb-lib"
 
 usage() {
-    echo "Usage: wb-nuke [--wip] [--dry-run]"
+    echo "Usage: wb-nuke [--wip] [--dry-run] [--verbose] [--json]"
     echo ""
     echo "Removes worktrees for branches that have been merged into the default branch."
     echo ""
     echo "Options:"
     echo "  --wip       Also remove WIP (unmerged) worktrees (DANGEROUS!)"
     echo "  --dry-run   Show what would be removed without actually removing"
+    echo "  --verbose   Show detailed output"
+    echo "  --json      Output result as JSON"
     echo ""
     echo "WARNING: This is a destructive operation!"
     exit 1
 }
+
+# Parse output control flags first
+wb_parse_output_flags "$@"
+set -- "${WB_REMAINING_ARGS[@]}"
 
 # Parse arguments
 include_wip=false
@@ -49,10 +55,9 @@ fi
 # Get main worktree (cannot be removed)
 main_worktree=$(wb_get_main_worktree)
 
-echo "Analyzing worktrees..."
-echo "Default branch: $default_branch"
-echo "Main worktree: $main_worktree"
-echo ""
+wb_log_milestone "Analyzing worktrees"
+wb_log_progress "Default branch: $default_branch"
+wb_log_progress "Main worktree: $main_worktree"
 
 merged_worktrees=()
 wip_worktrees=()
@@ -87,30 +92,32 @@ if [[ -n "$current_worktree" && "$current_worktree" != "$main_worktree" && -n "$
     fi
 fi
 
-# Report findings
-echo "MERGED WORKTREES (safe to remove):"
-if [[ ${#merged_worktrees[@]} -eq 0 ]]; then
-    echo "  (none)"
-else
-    for entry in "${merged_worktrees[@]}"; do
-        local path="${entry%%|*}"
-        local branch="${entry#*|}"
-        echo "  $path ($branch)"
-    done
-fi
-echo ""
+# Report findings (text mode only or verbose)
+if [[ "$WB_OUTPUT_FORMAT" != "json" ]]; then
+    echo "MERGED WORKTREES (safe to remove):"
+    if [[ ${#merged_worktrees[@]} -eq 0 ]]; then
+        echo "  (none)"
+    else
+        for entry in "${merged_worktrees[@]}"; do
+            local wt_path="${entry%%|*}"
+            local wt_branch="${entry#*|}"
+            echo "  $wt_path ($wt_branch)"
+        done
+    fi
+    echo ""
 
-echo "WIP WORKTREES (unmerged):"
-if [[ ${#wip_worktrees[@]} -eq 0 ]]; then
-    echo "  (none)"
-else
-    for entry in "${wip_worktrees[@]}"; do
-        local path="${entry%%|*}"
-        local branch="${entry#*|}"
-        echo "  $path ($branch)"
-    done
+    echo "WIP WORKTREES (unmerged):"
+    if [[ ${#wip_worktrees[@]} -eq 0 ]]; then
+        echo "  (none)"
+    else
+        for entry in "${wip_worktrees[@]}"; do
+            local wt_path="${entry%%|*}"
+            local wt_branch="${entry#*|}"
+            echo "  $wt_path ($wt_branch)"
+        done
+    fi
+    echo ""
 fi
-echo ""
 
 # Determine what to remove
 to_remove=("${merged_worktrees[@]}")
@@ -119,59 +126,79 @@ if $include_wip; then
 fi
 
 if [[ ${#to_remove[@]} -eq 0 ]]; then
-    echo "Nothing to remove."
+    wb_output_start
+    wb_output_field "removed_count" "0"
+    wb_output_field "failed_count" "0"
+    wb_output_field "message" "Nothing to remove"
+    wb_output_end
     exit 0
 fi
 
 # Dry run or actual removal
 if $dry_run; then
-    echo "DRY RUN - Would remove:"
-    for entry in "${to_remove[@]}"; do
-        local path="${entry%%|*}"
-        local branch="${entry#*|}"
-        echo "  Worktree: $path"
-        echo "  Branch: $branch"
-        echo ""
-    done
-    echo "Run without --dry-run to actually remove."
+    if [[ "$WB_OUTPUT_FORMAT" != "json" ]]; then
+        echo "DRY RUN - Would remove:"
+        for entry in "${to_remove[@]}"; do
+            local dr_path="${entry%%|*}"
+            local dr_branch="${entry#*|}"
+            echo "  Worktree: $dr_path"
+            echo "  Branch: $dr_branch"
+            echo ""
+        done
+        echo "Run without --dry-run to actually remove."
+    else
+        # JSON output for dry-run
+        wb_output_start
+        wb_output_field "dry_run" "true"
+        wb_output_field "would_remove_count" "${#to_remove[@]}"
+        wb_output_end
+    fi
     exit 0
 fi
 
 # Actual removal
-echo "REMOVING WORKTREES:"
+wb_log_milestone "Removing worktrees"
 removed_count=0
 failed_count=0
+typeset -ga removed_list
+typeset -ga failed_list
 
 for entry in "${to_remove[@]}"; do
-    local path="${entry%%|*}"
-    local branch="${entry#*|}"
-    echo ""
-    echo "Removing: $path ($branch)"
+    local rm_path="${entry%%|*}"
+    local rm_branch="${entry#*|}"
+
+    wb_log_progress "Removing: $rm_path ($rm_branch)"
 
     # Remove worktree
-    if git worktree remove "$path" 2>&1; then
-        echo "  Worktree removed."
+    if wb_run_git worktree remove "$rm_path"; then
+        wb_log_progress "  Worktree removed"
 
         # Delete branch
-        if git branch -d "$branch" 2>&1; then
-            echo "  Branch deleted."
+        if wb_run_git branch -d "$rm_branch"; then
+            wb_log_progress "  Branch deleted"
         else
-            echo "  WARNING: Could not delete branch | ACTION: Use 'git branch -D $branch' to force delete"
+            wb_log_progress "  WARNING: Could not delete branch"
         fi
         ((++removed_count))
+        removed_list+=("$rm_path|$rm_branch")
     else
-        echo "  ERROR: Failed to remove worktree | ACTION: Check for uncommitted changes or use 'git worktree remove --force'"
+        wb_log_progress "  ERROR: Failed to remove worktree"
         ((++failed_count))
+        failed_list+=("$rm_path|$rm_branch")
     fi
 done
 
-echo ""
-echo "=========="
-echo "SUMMARY: Removed $removed_count worktree(s), $failed_count failed"
+# Output structured result
+wb_output_start
+wb_output_field "removed_count" "$removed_count"
+wb_output_field "failed_count" "$failed_count"
+wb_output_field "total_processed" "${#to_remove[@]}"
+wb_output_field "status" "$([[ $failed_count -eq 0 ]] && echo 'success' || echo 'partial')"
+wb_output_end
 
 if [[ $failed_count -gt 0 ]]; then
-    echo "ERROR: Some worktrees could not be removed | ACTION: Check for uncommitted changes or use 'git worktree remove --force'"
+    if [[ "$WB_OUTPUT_FORMAT" != "json" ]]; then
+        echo "ERROR: Some worktrees could not be removed | ACTION: Check for uncommitted changes or use 'git worktree remove --force'"
+    fi
     exit 1
 fi
-
-echo "SUCCESS: Cleanup complete"

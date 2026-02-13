@@ -8,17 +8,28 @@ SCRIPT_DIR="${0:A:h}"
 source "$SCRIPT_DIR/wb-lib"
 
 usage() {
-    echo "Usage: wb-rm <worktree-path> [--delete-branch]"
+    echo "Usage: wb-rm <worktree-path> [--delete-branch] [--verbose] [--json]"
     echo ""
     echo "Removes the specified git worktree."
     echo ""
     echo "Options:"
     echo "  --delete-branch    Also delete the branch after removing worktree"
+    echo "  --verbose          Show detailed progress information"
+    echo "  --json             Output results in JSON format"
     exit 1
 }
 
+# Parse output control flags first
+wb_parse_output_flags "$@"
+set -- "${WB_REMAINING_ARGS[@]}"
+
 # Parse arguments
 if [[ $# -lt 1 ]]; then
+    usage
+fi
+
+# Handle help flag
+if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     usage
 fi
 
@@ -80,29 +91,47 @@ if [[ "$worktree_path" == "$main_worktree" ]]; then
 fi
 
 # Remove worktree
-echo "Removing worktree at $worktree_path..."
+wb_log_milestone "Removing worktree at $worktree_path..."
 
-if ! git worktree remove "$worktree_path" 2>&1; then
-    echo "ERROR: Worktree has uncommitted changes | ACTION: Commit or stash changes before removing, or use 'rm -rf' to force"
+wb_log_progress "Executing git worktree remove"
+if ! wb_run_git worktree remove "$worktree_path"; then
+    if [[ "$WB_GIT_STDERR" =~ "changes" || "$WB_GIT_STDERR" =~ "modified" || "$WB_GIT_STDERR" =~ "uncommitted" ]]; then
+        echo "ERROR: Worktree has uncommitted changes | ACTION: Commit or stash changes before removing, or use 'rm -rf' to force"
+    else
+        echo "ERROR: Failed to remove worktree | ACTION: Rerun with --verbose to see git output"
+    fi
     exit 1
 fi
 
-echo "Worktree removed."
+wb_log_progress "Worktree removed successfully"
 
 # Delete branch if requested
+branch_deleted="false"
 if $delete_branch && [[ -n "$branch_name" ]]; then
-    echo "Deleting branch '$branch_name'..."
+    wb_log_milestone "Deleting branch '$branch_name'..."
 
     # Try safe delete first
-    if git branch -d "$branch_name" 2>&1; then
-        echo "Branch deleted."
+    wb_log_progress "Attempting safe branch delete (git branch -d)"
+    if wb_run_git branch -d "$branch_name"; then
+        wb_log_progress "Branch deleted successfully"
+        branch_deleted="true"
     else
-        echo "WARNING: Branch not fully merged"
-        echo "ERROR: Cannot delete unmerged branch | ACTION: Use 'git branch -D $branch_name' to force delete"
+        if [[ "$WB_GIT_STDERR" =~ "not fully merged" ]]; then
+            echo "WARNING: Branch not fully merged"
+            echo "ERROR: Cannot delete unmerged branch | ACTION: Use 'git branch -D $branch_name' to force delete"
+        else
+            echo "ERROR: Failed to delete branch | ACTION: Rerun with --verbose to see git output"
+        fi
         exit 1
     fi
 fi
 
-echo ""
-echo "SUCCESS: Worktree removed"
-[[ -n "$branch_name" ]] && echo "BRANCH: $branch_name ($(if $delete_branch; then echo "deleted"; else echo "kept"; fi))"
+# Output structured results
+wb_output_start
+wb_output_field "status" "success"
+wb_output_field "worktree" "$worktree_path"
+if [[ -n "$branch_name" ]]; then
+    wb_output_field "branch" "$branch_name"
+    wb_output_field "branch_deleted" "$branch_deleted"
+fi
+wb_output_end

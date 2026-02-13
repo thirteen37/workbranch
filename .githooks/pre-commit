@@ -1,0 +1,34 @@
+#!/usr/bin/env zsh
+# pre-commit - Run shellcheck on modified scripts before committing
+
+set -euo pipefail
+
+# Check if shellcheck is installed
+if ! command -v shellcheck >/dev/null 2>&1; then
+    echo "Warning: shellcheck not installed, skipping shell script checks"
+    echo "Install with: brew install shellcheck (macOS) or apt-get install shellcheck (Linux)"
+    exit 0
+fi
+
+# Get list of staged shell scripts
+staged_scripts=$(git diff --cached --name-only --diff-filter=ACM | grep '^scripts/wb' || true)
+
+if [[ -z "$staged_scripts" ]]; then
+    # No shell scripts modified
+    exit 0
+fi
+
+echo "Running shellcheck on modified scripts..."
+
+# Run shellcheck-all if it exists
+if [[ -x scripts/shellcheck-all ]]; then
+    if ! ./scripts/shellcheck-all; then
+        echo ""
+        echo "Shellcheck failed! Fix the issues above or commit with --no-verify to skip."
+        exit 1
+    fi
+else
+    echo "Warning: scripts/shellcheck-all not found, skipping checks"
+fi
+
+exit 0

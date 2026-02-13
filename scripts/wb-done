@@ -25,6 +25,8 @@ usage() {
     echo "  --local-only    Skip all remote operations (fetch/pull/push/delete)"
     echo "  --dry-run       Show what would be done without executing"
     echo "  --discard-changes  Discard uncommitted changes (DANGEROUS)"
+    echo "  --verbose       Show detailed output (git commands, progress)"
+    echo "  --json          Output result as JSON"
     exit 1
 }
 
@@ -39,6 +41,10 @@ find_worktree_for_branch() {
         }
     '
 }
+
+# Parse output control flags first
+wb_parse_output_flags "$@"
+set -- "${WB_REMAINING_ARGS[@]}"
 
 # Parse arguments
 merge_strategy=""
@@ -228,32 +234,34 @@ if $has_remote && [[ -n "$remote_name" ]]; then
     fi
 fi
 
-# Print plan
-echo "=== wb-done ==="
-echo ""
-echo "Branch:       $current_branch"
-echo "Target:       $target_branch"
-echo "Worktree:     $current_worktree"
-echo "Main:         $main_worktree"
-echo ""
+# Print plan (verbose or dry-run mode)
+if [[ "${WB_VERBOSE:-0}" -eq 1 || "$dry_run" == "true" ]]; then
+    echo "=== wb-done ==="
+    echo ""
+    echo "Branch:       $current_branch"
+    echo "Target:       $target_branch"
+    echo "Worktree:     $current_worktree"
+    echo "Main:         $main_worktree"
+    echo ""
 
-if $skip_merge; then
-    echo "Merge:        SKIP (--skip-merge or already merged)"
-else
-    echo "Merge:        ${merge_strategy:-standard}"
-fi
-
-echo "Cleanup:      worktree + local branch"
-if $remote_branch_exists; then
-    if $keep_remote || ! $remote_reachable; then
-        echo "Remote:       KEEP ($([[ $keep_remote == true ]] && echo '--keep-remote' || echo 'not reachable'))"
+    if $skip_merge; then
+        echo "Merge:        SKIP (--skip-merge or already merged)"
     else
-        echo "Remote:       DELETE $remote_name/$current_branch"
+        echo "Merge:        ${merge_strategy:-standard}"
     fi
-else
-    echo "Remote:       (no remote branch)"
+
+    echo "Cleanup:      worktree + local branch"
+    if $remote_branch_exists; then
+        if $keep_remote || ! $remote_reachable; then
+            echo "Remote:       KEEP ($([[ $keep_remote == true ]] && echo '--keep-remote' || echo 'not reachable'))"
+        else
+            echo "Remote:       DELETE $remote_name/$current_branch"
+        fi
+    else
+        echo "Remote:       (no remote branch)"
+    fi
+    echo ""
 fi
-echo ""
 
 if $dry_run; then
     echo "DRY RUN - no changes made"
@@ -267,110 +275,110 @@ if ! $skip_merge; then
         exit 1
     fi
 
-    echo "=== Merging ==="
+    wb_log_milestone "Merging '$current_branch' into '$target_branch'"
 
     # Fetch latest
-    echo "Fetching latest from $remote_name..."
-    if ! git fetch "$remote_name" "$target_branch" 2>&1; then
+    wb_log_progress "Fetching latest from $remote_name..."
+    if ! wb_run_git fetch "$remote_name" "$target_branch"; then
         echo "ERROR: Failed to fetch $target_branch | ACTION: Check network connection and remote access"
         exit 1
     fi
 
     # Go to main worktree to perform merge
-    echo "Switching to main worktree..."
+    wb_log_progress "Switching to main worktree..."
     cd "$main_worktree"
 
     # Ensure we're on target branch
-    if ! git checkout "$target_branch" 2>&1; then
+    wb_log_progress "Checking out $target_branch..."
+    if ! wb_run_git checkout "$target_branch"; then
         echo "ERROR: Failed to checkout $target_branch | ACTION: Ensure branch exists and no conflicts"
         exit 1
     fi
 
     # Pull latest
-    echo "Pulling latest $target_branch..."
-    if ! git pull "$remote_name" "$target_branch" 2>&1; then
+    wb_log_progress "Pulling latest $target_branch..."
+    if ! wb_run_git pull "$remote_name" "$target_branch"; then
         echo "ERROR: Failed to pull $target_branch | ACTION: Check for merge conflicts or network issues"
         exit 1
     fi
 
     # Perform merge based on strategy
-    echo "Merging '$current_branch' into '$target_branch'..."
+    wb_log_progress "Performing ${merge_strategy:-standard} merge..."
 
     case "$merge_strategy" in
         squash)
-            if ! git merge --squash "$current_branch"; then
+            if ! wb_run_git merge --squash "$current_branch"; then
                 echo "ERROR: Merge conflict during squash | ACTION: Resolve conflicts in $main_worktree, then run 'wb-done --skip-merge' from worktree"
                 exit 1
             fi
             # Squash merge requires a commit
-            git commit -m "Squash merge branch '$current_branch'"
+            wb_run_git commit -m "Squash merge branch '$current_branch'"
             ;;
         rebase)
             # For rebase strategy, we rebase the feature branch first, then fast-forward merge
             cd "$current_worktree"
-            if ! git rebase "$target_branch"; then
+            if ! wb_run_git rebase "$target_branch"; then
                 echo "ERROR: Rebase conflict | ACTION: Resolve conflicts, run 'git rebase --continue', then run 'wb-done --skip-merge'"
                 exit 1
             fi
             cd "$main_worktree"
-            git merge --ff-only "$current_branch"
+            wb_run_git merge --ff-only "$current_branch"
             ;;
         *)
-            if ! git merge --no-ff "$current_branch" -m "Merge branch '$current_branch'"; then
+            if ! wb_run_git merge --no-ff "$current_branch" -m "Merge branch '$current_branch'"; then
                 echo "ERROR: Merge conflict | ACTION: Resolve conflicts in $main_worktree, commit, then run 'wb-done --skip-merge' from worktree"
                 exit 1
             fi
             ;;
     esac
 
-    # Push to remote (ADD ERROR HANDLING - CRITICAL BUG FIX)
-    echo "Pushing $target_branch to $remote_name..."
-    if ! git push "$remote_name" "$target_branch" 2>&1; then
+    # Push to remote
+    wb_log_progress "Pushing $target_branch to $remote_name..."
+    if ! wb_run_git push "$remote_name" "$target_branch"; then
         echo "ERROR: Failed to push $target_branch | ACTION: Push manually with: git push $remote_name $target_branch"
         exit 1
     fi
 
-    echo "Merge complete."
-    echo ""
+    wb_log_progress "Merge complete"
 fi
 
 # Phase 2: Cleanup
-echo "=== Cleanup ==="
+wb_log_milestone "Cleaning up worktree and branches"
 
 # Make sure we're in main worktree for cleanup
 cd "$main_worktree"
 
 # Remove worktree
-echo "Removing worktree at $current_worktree..."
+wb_log_progress "Removing worktree at $current_worktree..."
 if $discard_changes; then
-    if ! git worktree remove --force "$current_worktree" 2>&1; then
+    if ! wb_run_git worktree remove --force "$current_worktree"; then
         echo "ERROR: Failed to remove worktree | ACTION: Check 'git worktree list' for issues"
         exit 1
     fi
 else
-    if ! git worktree remove "$current_worktree" 2>&1; then
+    if ! wb_run_git worktree remove "$current_worktree"; then
         echo "ERROR: Failed to remove worktree | ACTION: Check for uncommitted changes or use --discard-changes"
         exit 1
     fi
 fi
-echo "Worktree removed."
+wb_log_progress "Worktree removed"
 
 # Delete local branch
-echo "Deleting local branch '$current_branch'..."
-if git branch -d "$current_branch" 2>&1; then
-    echo "Local branch deleted."
+wb_log_progress "Deleting local branch '$current_branch'..."
+if wb_run_git branch -d "$current_branch"; then
+    wb_log_progress "Local branch deleted"
 else
     # Force delete if needed (branch was squash/rebase merged so -d might fail)
-    echo "WARNING: Branch not detected as merged (possibly squash/rebase), force deleting..."
-    git branch -D "$current_branch"
-    echo "Local branch force deleted."
+    wb_log_progress "Branch not detected as merged, force deleting..."
+    wb_run_git branch -D "$current_branch"
+    wb_log_progress "Local branch force deleted"
 fi
 
 # Delete remote branch
 if $remote_branch_exists && ! $keep_remote && $remote_reachable; then
-    echo "Deleting remote branch '$remote_name/$current_branch'..."
-    if git push "$remote_name" --delete "$current_branch" 2>&1; then
-        echo "Remote branch deleted."
+    wb_log_progress "Deleting remote branch '$remote_name/$current_branch'..."
+    if wb_run_git push "$remote_name" --delete "$current_branch"; then
+        wb_log_progress "Remote branch deleted"
     else
         echo "WARNING: Could not delete remote branch (may already be deleted)"
     fi
@@ -378,12 +386,17 @@ elif $remote_branch_exists && ! $keep_remote && ! $remote_reachable; then
     echo "WARNING: Cannot delete remote branch (remote not reachable)"
 fi
 
-echo ""
-echo "=========="
-echo "SUCCESS: Branch '$current_branch' finished and cleaned up"
-echo "BRANCH: $current_branch (deleted)"
+# Output structured result
+wb_output_start
+wb_output_field "status" "success"
+wb_output_field "branch" "$current_branch"
+wb_output_field "target" "$target_branch"
+wb_output_field "worktree" "$current_worktree"
+wb_output_field "merged" "$([[ $skip_merge == true ]] && echo 'false' || echo 'true')"
+wb_output_field "remote_deleted" "$([[ $remote_branch_exists == true && $keep_remote == false && $remote_reachable == true ]] && echo 'true' || echo 'false')"
+wb_output_end
 
-if ! $running_from_main; then
+if ! $running_from_main && [[ "$WB_OUTPUT_FORMAT" != "json" ]]; then
     # Running from feature worktree - directory was deleted, need to navigate
     echo ""
     echo "IMPORTANT: Your current directory has been deleted."

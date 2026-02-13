@@ -8,19 +8,25 @@ SCRIPT_DIR="${0:A:h}"
 source "$SCRIPT_DIR/wb-lib"
 
 usage() {
-    echo "Usage: wb-move <branch-name> [--commits N]"
+    echo "Usage: wb-move <branch-name> [--commits N] [--verbose] [--json]"
     echo ""
     echo "Moves changes from main/master to a new worktree."
     echo "Handles both uncommitted changes and local commits ahead of remote."
     echo ""
     echo "Options:"
     echo "  --commits N    Move last N commits (default: auto-detect divergence from origin)"
+    echo "  --verbose      Show detailed progress information"
+    echo "  --json         Output results in JSON format"
     echo ""
     echo "Examples:"
     echo "  wb-move feature-login         # Move all divergent changes to new branch"
     echo "  wb-move bugfix --commits 2    # Move last 2 commits to new branch"
     exit 1
 }
+
+# Parse output control flags first
+wb_parse_output_flags "$@"
+set -- "${WB_REMAINING_ARGS[@]}"
 
 # Parse arguments
 branch_name=""
@@ -133,31 +139,38 @@ if ! $has_uncommitted && ! $has_untracked && [[ "$commits_to_move" -eq 0 ]]; the
 fi
 
 # Report what we'll move
-echo "Changes to move to '$branch_name':"
+wb_log_milestone "Moving changes to '$branch_name'"
 if $has_uncommitted; then
-    echo "  - Uncommitted changes (staged and unstaged)"
+    wb_log_progress "  - Uncommitted changes (staged and unstaged)"
 fi
 if $has_untracked; then
-    echo "  - Untracked files"
+    wb_log_progress "  - Untracked files"
 fi
 if [[ "$commits_to_move" -gt 0 ]]; then
     if [[ -n "$remote_branch" ]]; then
-        echo "  - $commits_to_move commit(s) ahead of $remote_branch"
+        wb_log_progress "  - $commits_to_move commit(s) ahead of $remote_branch"
     else
-        echo "  - $commits_to_move commit(s)"
+        wb_log_progress "  - $commits_to_move commit(s)"
     fi
-    git log --oneline -n "$commits_to_move" | sed 's/^/      /'
+    if [[ "${WB_VERBOSE:-0}" -eq 1 && "$WB_OUTPUT_FORMAT" != "json" ]]; then
+        git log --oneline -n "$commits_to_move" | sed 's/^/      /'
+    fi
 fi
-echo ""
 
 # Stash uncommitted changes and untracked files
 stash_created=false
 if $has_uncommitted || $has_untracked; then
-    echo "Stashing uncommitted changes..."
+    wb_log_milestone "Stashing uncommitted changes..."
     if $has_untracked; then
-        git stash push -u -m "wb-move: changes for $branch_name"
+        if ! wb_run_git stash push -u -m "wb-move: changes for $branch_name"; then
+            echo "ERROR: Failed to stash changes | ACTION: ${WB_GIT_STDERR}"
+            exit 1
+        fi
     else
-        git stash push -m "wb-move: changes for $branch_name"
+        if ! wb_run_git stash push -m "wb-move: changes for $branch_name"; then
+            echo "ERROR: Failed to stash changes | ACTION: ${WB_GIT_STDERR}"
+            exit 1
+        fi
     fi
     stash_created=true
 fi
@@ -172,35 +185,44 @@ fi
 # Reset main to remote (before creating worktree so branch starts from right place)
 if [[ "$commits_to_move" -gt 0 ]]; then
     if [[ -n "$remote_branch" ]]; then
-        echo "Resetting $current_branch to $remote_branch..."
-        git reset --hard "$remote_branch"
+        wb_log_milestone "Resetting $current_branch to $remote_branch..."
+        if ! wb_run_git reset --hard "$remote_branch"; then
+            echo "ERROR: Failed to reset branch | ACTION: ${WB_GIT_STDERR}"
+            exit 1
+        fi
     else
-        echo "Resetting $current_branch to HEAD~$commits_to_move..."
-        git reset --hard "HEAD~$commits_to_move"
+        wb_log_milestone "Resetting $current_branch to HEAD~$commits_to_move..."
+        if ! wb_run_git reset --hard "HEAD~$commits_to_move"; then
+            echo "ERROR: Failed to reset branch | ACTION: ${WB_GIT_STDERR}"
+            exit 1
+        fi
     fi
 fi
 
 # Create worktree using wb-new
-echo ""
-echo "Creating worktree..."
-if ! "$SCRIPT_DIR/wb-new" "$branch_name"; then
+wb_log_milestone "Creating worktree..."
+# Pass verbosity flags through to wb-new
+verbosity_flags=()
+[[ "${WB_VERBOSE:-0}" -eq 1 ]] && verbosity_flags+=(--verbose)
+[[ "${WB_OUTPUT_FORMAT:-text}" == "json" ]] && verbosity_flags+=(--json)
+
+if ! "$SCRIPT_DIR/wb-new" "$branch_name" "${verbosity_flags[@]}"; then
     # Restore state on failure
-    echo ""
-    echo "ERROR: Failed to create worktree | ACTION: Recovering original state..."
+    wb_log_milestone "ERROR: Failed to create worktree | ACTION: Recovering original state..."
 
     if [[ "$commits_to_move" -gt 0 && -n "$commits_to_cherry_pick" ]]; then
-        echo "Restoring commits..."
+        wb_log_progress "Restoring commits..."
         for commit in ${=commits_to_cherry_pick}; do
-            if ! git cherry-pick "$commit" >/dev/null 2>&1; then
-                echo "  - Could not restore commit $commit"
+            if ! wb_run_git cherry-pick "$commit"; then
+                wb_log_progress "  - Could not restore commit $commit"
             fi
         done
     fi
 
     if $stash_created; then
-        echo "Restoring stashed changes..."
-        if ! git stash pop >/dev/null 2>&1; then
-            echo "  - Could not restore stashed changes"
+        wb_log_progress "Restoring stashed changes..."
+        if ! wb_run_git stash pop; then
+            wb_log_progress "  - Could not restore stashed changes"
         fi
     fi
 
@@ -218,11 +240,11 @@ worktree_path=$(wb_normalize_path "$worktree_path" "$git_root")
 
 # Cherry-pick commits in the worktree
 if [[ -n "$commits_to_cherry_pick" ]]; then
-    echo ""
-    echo "Cherry-picking commits to worktree..."
+    wb_log_milestone "Cherry-picking commits to worktree..."
     cd "$worktree_path"
     for commit in ${=commits_to_cherry_pick}; do
-        if ! git cherry-pick "$commit"; then
+        wb_log_progress "  Cherry-picking $commit"
+        if ! wb_run_git cherry-pick "$commit"; then
             echo "WARNING: Cherry-pick failed for $commit | ACTION: Resolve conflicts in worktree manually"
         fi
     done
@@ -231,24 +253,36 @@ fi
 
 # Apply stashed changes in worktree
 if $stash_created; then
-    echo ""
-    echo "Applying stashed changes to worktree..."
+    wb_log_milestone "Applying stashed changes to worktree..."
     cd "$worktree_path"
-    if ! git stash pop; then
+    if ! wb_run_git stash pop; then
         echo "WARNING: Stash apply had conflicts | ACTION: Resolve conflicts in worktree"
     fi
     cd "$git_root"
 fi
 
-echo ""
-echo "SUCCESS: Changes moved to worktree at $worktree_path"
-echo "BRANCH: $branch_name"
-echo ""
-echo "Next steps:"
-echo "  1. Navigate to: $worktree_path"
-echo "  2. Continue development on the '$branch_name' branch"
-if [[ -n "$remote_branch" ]]; then
-    echo "  3. Main branch is now clean and matches $remote_branch"
-else
-    echo "  3. Main branch has been reset"
+wb_output_start
+wb_output_field "status" "success"
+wb_output_field "branch" "$branch_name"
+wb_output_field "worktree" "$worktree_path"
+wb_output_field "changes_moved" "true"
+if [[ "$commits_to_move" -gt 0 ]]; then
+    wb_output_field "commits_moved" "$commits_to_move"
+fi
+if $has_uncommitted || $has_untracked; then
+    wb_output_field "stash_applied" "true"
+fi
+wb_output_end
+
+# Show next steps in text mode
+if [[ "$WB_OUTPUT_FORMAT" != "json" ]]; then
+    echo ""
+    echo "Next steps:"
+    echo "  1. Navigate to: $worktree_path"
+    echo "  2. Continue development on the '$branch_name' branch"
+    if [[ -n "$remote_branch" ]]; then
+        echo "  3. Main branch is now clean and matches $remote_branch"
+    else
+        echo "  3. Main branch has been reset"
+    fi
 fi

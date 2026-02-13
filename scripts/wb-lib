@@ -191,3 +191,131 @@ wb_parse_config() {
         esac
     done < "$config_file"
 }
+
+# Parse output control flags from arguments
+# Sets global variables:
+#   WB_VERBOSE=0|1 - whether to show detailed output
+#   WB_OUTPUT_FORMAT=text|json - output format
+#   WB_REMAINING_ARGS - array of remaining arguments
+# Usage: wb_parse_output_flags "$@"
+#        set -- "${WB_REMAINING_ARGS[@]}"
+wb_parse_output_flags() {
+    # Initialize globals
+    typeset -ga WB_REMAINING_ARGS
+    WB_REMAINING_ARGS=()
+    typeset -g WB_VERBOSE=0
+    typeset -g WB_OUTPUT_FORMAT="text"
+
+    # Parse flags
+    for arg in "$@"; do
+        case "$arg" in
+            --verbose)
+                WB_VERBOSE=1
+                ;;
+            --json)
+                WB_OUTPUT_FORMAT="json"
+                ;;
+            *)
+                WB_REMAINING_ARGS+=("$arg")
+                ;;
+        esac
+    done
+}
+
+# Log a major milestone (always shown)
+# Usage: wb_log_milestone "Creating worktree"
+wb_log_milestone() {
+    local message="$1"
+    if [[ "$WB_OUTPUT_FORMAT" != "json" ]]; then
+        echo "$message"
+    fi
+    return 0
+}
+
+# Log a progress step (verbose mode only)
+# Usage: wb_log_progress "Copying config files..."
+wb_log_progress() {
+    local message="$1"
+    if [[ "${WB_VERBOSE:-0}" -eq 1 && "$WB_OUTPUT_FORMAT" != "json" ]]; then
+        echo "$message"
+    fi
+    return 0
+}
+
+# Run git command with output control
+# Captures stderr in WB_GIT_STDERR for error handling
+# Shows output only in verbose mode
+# Returns: git's exit code
+# Usage: if ! wb_run_git worktree add "$path" "$branch"; then
+#            echo "ERROR: Git failed: $WB_GIT_STDERR"
+#        fi
+wb_run_git() {
+    local stderr_file="/tmp/claude/wb-git-stderr-$$"
+    typeset -g WB_GIT_STDERR=""
+    local exit_code
+
+    # Ensure temp directory exists
+    mkdir -p "/tmp/claude" 2>/dev/null || true
+
+    # Run git command
+    if [[ "${WB_VERBOSE:-0}" -eq 1 ]]; then
+        # Verbose: show output, still capture stderr
+        git "$@" 2> >(tee "$stderr_file" >&2)
+        exit_code=$?
+    else
+        # Quiet: suppress all output, capture stderr
+        git "$@" >/dev/null 2>"$stderr_file"
+        exit_code=$?
+    fi
+
+    # Read stderr for caller to check
+    if [[ -f "$stderr_file" ]]; then
+        WB_GIT_STDERR=$(<"$stderr_file")
+        rm -f "$stderr_file"
+    fi
+
+    return $exit_code
+}
+
+# Structured output helpers (key-value or JSON)
+# Usage:
+#   wb_output_start
+#   wb_output_field "status" "success"
+#   wb_output_field "branch" "$branch_name"
+#   wb_output_end
+
+# Start structured output
+wb_output_start() {
+    typeset -g WB_OUTPUT_FIRST_FIELD=1
+    if [[ "${WB_OUTPUT_FORMAT:-text}" == "json" ]]; then
+        echo "{"
+    fi
+}
+
+# Output a field (key-value pair)
+wb_output_field() {
+    local key="$1"
+    local value="$2"
+
+    if [[ "${WB_OUTPUT_FORMAT:-text}" == "json" ]]; then
+        # JSON format
+        if [[ "${WB_OUTPUT_FIRST_FIELD:-1}" -eq 0 ]]; then
+            echo ","
+        fi
+        # Escape quotes in value
+        value="${value//\"/\\\"}"
+        printf '  "%s": "%s"' "$key" "$value"
+        WB_OUTPUT_FIRST_FIELD=0
+    else
+        # Text format (key: value)
+        echo "${key}: ${value}"
+    fi
+}
+
+# End structured output
+wb_output_end() {
+    if [[ "${WB_OUTPUT_FORMAT:-text}" == "json" ]]; then
+        echo ""
+        echo "}"
+    fi
+}
