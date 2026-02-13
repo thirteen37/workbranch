@@ -196,13 +196,13 @@ wb_parse_config() {
 # Sets global variables:
 #   WB_VERBOSE=0|1 - whether to show detailed output
 #   WB_OUTPUT_FORMAT=text|json - output format
-# Returns: remaining arguments (non-flag args)
-# Usage: remaining_args=($(wb_parse_output_flags "$@"))
-#        set -- "${remaining_args[@]}"
+#   WB_REMAINING_ARGS - array of remaining arguments
+# Usage: wb_parse_output_flags "$@"
+#        set -- "${WB_REMAINING_ARGS[@]}"
 wb_parse_output_flags() {
-    local -a remaining
-
     # Initialize globals
+    typeset -ga WB_REMAINING_ARGS
+    WB_REMAINING_ARGS=()
     typeset -g WB_VERBOSE=0
     typeset -g WB_OUTPUT_FORMAT="text"
 
@@ -216,13 +216,10 @@ wb_parse_output_flags() {
                 WB_OUTPUT_FORMAT="json"
                 ;;
             *)
-                remaining+=("$arg")
+                WB_REMAINING_ARGS+=("$arg")
                 ;;
         esac
     done
-
-    # Return remaining args
-    echo "${remaining[@]}"
 }
 
 # Log a major milestone (always shown)

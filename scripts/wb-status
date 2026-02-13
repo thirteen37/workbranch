@@ -14,22 +14,24 @@ usage() {
     echo ""
     echo "Options:"
     echo "  --json            Output as JSON"
+    echo "  --verbose         Show detailed output (for debugging)"
     echo "  --check-main      Exit 0 if on main worktree AND default branch, 1 otherwise"
     echo "  --check-worktree  Exit 0 if in feature worktree, 1 otherwise"
     echo "  -h, --help        Show this help"
     exit 1
 }
 
-# Parse arguments
-output_format="text"
+# Parse output control flags (--verbose, --json)
+wb_parse_output_flags "$@"
+set -- "${WB_REMAINING_ARGS[@]}"
+
+# Use WB_OUTPUT_FORMAT from wb-lib
+output_format="$WB_OUTPUT_FORMAT"
 check_mode=""
 
+# Parse remaining arguments
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --json)
-            output_format="json"
-            shift
-            ;;
         --check-main)
             check_mode="main"
             shift
