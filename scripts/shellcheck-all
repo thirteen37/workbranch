@@ -1,10 +1,10 @@
-#!/usr/bin/env zsh
+#!/usr/bin/env bash
 # shellcheck-all - Run shellcheck on all workbranch scripts
 # Usage: shellcheck-all [--fix]
 
 set -euo pipefail
 
-SCRIPT_DIR="${0:A:h}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 FIX_MODE=false
 
 # Parse arguments
@@ -38,7 +38,7 @@ NC='\033[0m'
 
 echo "Running shellcheck on workbranch scripts..."
 echo ""
-echo "${YELLOW}Note:${NC} shellcheck doesn't fully support ZSH syntax"
+printf "${YELLOW}Note:${NC} shellcheck doesn't fully support ZSH syntax\n"
 echo "      Running in bash-compatible mode to catch generic issues"
 echo "      Some ZSH-specific warnings are expected and can be ignored"
 echo ""
@@ -80,7 +80,7 @@ for script in "${scripts[@]}"; do
     if $FIX_MODE; then
         echo "=== $script_name ==="
         if shellcheck -s bash -e "$EXCLUDES" -f diff "$script" 2>&1; then
-            echo -e "${GREEN}✓${NC} No issues"
+            printf "${GREEN}✓${NC} No issues\n"
             ((++passed))
         else
             ((++failed))
@@ -88,15 +88,15 @@ for script in "${scripts[@]}"; do
         echo ""
     else
         if output=$(shellcheck -s bash -e "$EXCLUDES" "$script" 2>&1); then
-            echo -e "${GREEN}✓${NC} $script_name"
+            printf "${GREEN}✓${NC} %s\n" "$script_name"
             ((++passed))
         else
             # Check if only ZSH-related errors
             if echo "$output" | grep -qE "SC(1071|2296|2034|2154)"; then
-                echo -e "${YELLOW}~${NC} $script_name (ZSH-specific syntax, OK)"
+                printf "${YELLOW}~${NC} %s (ZSH-specific syntax, OK)\n" "$script_name"
                 ((++skipped))
             else
-                echo -e "${RED}✗${NC} $script_name"
+                printf "${RED}✗${NC} %s\n" "$script_name"
                 echo "$output" | grep -v "SC1071\|SC2296\|SC2034\|SC2154" || true
                 ((++failed))
             fi
